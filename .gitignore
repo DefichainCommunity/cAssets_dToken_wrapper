@@ -1,0 +1,6 @@
+contract/cache/
+contract/foundry.lock
+contract/out/
+frontend/Cargo.lock
+frontend/dist/
+frontend/target/
