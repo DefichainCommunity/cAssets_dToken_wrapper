@@ -13,7 +13,7 @@ pub fn App() -> Element {
     // Signal for transaction status
     let tx_status = use_signal(|| "".to_string());
 
-    let contract_address = "0xYourContractAddressHere";
+    let contract_address = "0x998abeb3E57409262aE5b751f60747921B33613E";
 
     rsx! {
         div {
@@ -54,7 +54,7 @@ pub fn App() -> Element {
                     let mut tx_status = tx_status.clone();
                     spawn_local(async move {
                         tx_status.set("Wrapping...".to_string());
-                        let res = wrap_tokens(contract_address, &underlying.read(), &amount.read()).await;
+                        let res = wrap_tokens(contract_address, &underlying.read(), &amount.read(), &wrapped.read()).await.as_string().unwrap_or_default();
                         tx_status.set(format!("Wrap done: {:?}", res));
                     });
                 },
@@ -76,7 +76,7 @@ pub fn App() -> Element {
                     let mut tx_status = tx_status.clone();
                     spawn_local(async move {
                         tx_status.set("Unwrapping...".to_string());
-                        let res = unwrap_tokens(contract_address, &wrapped.read(), &amount.read()).await;
+                        let res = unwrap_tokens(contract_address, &wrapped.read(), &amount.read(), &underlying.read()).await.as_string().unwrap_or_default();
                         tx_status.set(format!("Unwrap done: {:?}", res));
                     });
                 },
