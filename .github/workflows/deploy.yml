@@ -2,7 +2,7 @@ name: Deploy Dioxus app to GitHub Pages
 
 on:
   push:
-    branches: [ main ]    # or your default branch
+    branches: [ deploy ]    # or your default branch
   workflow_dispatch:
 
 permissions:
