@@ -6,3 +6,6 @@ default_platform = "web"
 title = "cAssets dToken Wrapper"
 base_path = "cAssets_dToken_wrapper"
 csp_hash = true
+
+[web.wasm]
+mode = "bundled"
