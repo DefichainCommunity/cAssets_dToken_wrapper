@@ -5,3 +5,4 @@ default_platform = "web"
 [web.app]
 title = "cAssets dToken Wrapper"
 base_path = "cAssets_dToken_wrapper"
+csp_hash = true
