@@ -1,6 +1,4 @@
-use std::io::empty;
-use std::str::FromStr;
-use alloy::primitives::{utils::{format_units, parse_units, Unit},U256};
+use alloy::primitives::{utils::{format_units, parse_units},U256};
 use dioxus::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use serde_wasm_bindgen::from_value;
@@ -20,22 +18,22 @@ enum TokenType{
     CAsset,
 }
 
-fn update_pair(from: &String, wrappers: &Vec::<TokenWrapperInfo>) -> (Option<TokenInfo>, Option<TokenInfo>){
+fn update_pair(from: &String, wrappers: &[TokenWrapperInfo]) -> (Option<TokenInfo>, Option<TokenInfo>){
 
-    if let Some(tok) = wrappers.iter().find(|t| t.dTokenSymbol == *from || t.cAssetSymbol == *from) {
+    if let Some(tok) = wrappers.iter().find(|t| t.d_token_symbol == *from || t.c_asset_symbol == *from) {
         let d_token = TokenInfo{
-            symbol: tok.dTokenSymbol.clone(),
-            address: tok.dTokenAddress.clone(),
-            decimals: tok.dTokenDecimals,
+            symbol: tok.d_token_symbol.clone(),
+            address: tok.d_token_address.clone(),
+            decimals: tok.d_token_decimals,
             token_type: TokenType::DToken,
         };
         let c_asset = TokenInfo{
-            symbol: tok.cAssetSymbol.clone(),
-            address: tok.cAssetAddress.clone(),
-            decimals: tok.cAssetDecimals,
+            symbol: tok.c_asset_symbol.clone(),
+            address: tok.c_asset_address.clone(),
+            decimals: tok.c_asset_decimals,
             token_type: TokenType::CAsset,
         };
-        if  tok.dTokenSymbol == *from {
+        if  tok.d_token_symbol == *from {
             return (Some(d_token),Some(c_asset))
         }else{
             return (Some(c_asset),Some(d_token))
@@ -44,11 +42,11 @@ fn update_pair(from: &String, wrappers: &Vec::<TokenWrapperInfo>) -> (Option<Tok
     (None, None)
 }
 
-fn token_pair_to_wrapper(token_a: &Option<TokenInfo>, token_b: &Option<TokenInfo>, wrappers: &Vec::<TokenWrapperInfo>) -> Option<TokenWrapperInfo>{
+fn token_pair_to_wrapper(token_a: &Option<TokenInfo>, token_b: &Option<TokenInfo>, wrappers: &[TokenWrapperInfo]) -> Option<TokenWrapperInfo>{
     if let (Some(token_a), Some(token_b)) = (token_a,token_b){
         return wrappers.iter().find(|w|
-                                    (w.cAssetAddress == token_a.address && w.dTokenAddress == token_b.address) ||
-                                    (w.cAssetAddress == token_b.address && w.dTokenAddress == token_a.address)
+                                    (w.c_asset_address == token_a.address && w.d_token_address == token_b.address) ||
+                                    (w.c_asset_address == token_b.address && w.d_token_address == token_a.address)
         ).cloned();
     }
     None
@@ -73,17 +71,17 @@ pub fn App() -> Element {
     let mut amount_out = use_signal(|| "".to_string());
 
     let mut balance = use_signal(|| "0.0".to_string());
-    let mut wrappers = use_signal(|| Vec::<TokenWrapperInfo>::new());
+    let wrappers = use_signal(Vec::<TokenWrapperInfo>::new);
     let mut to_selected = use_signal(|| None as Option<TokenInfo>);
     let mut from_selected = use_signal(|| None as Option<TokenInfo>);
-    let mut tx_status = use_signal(|| "".to_string());
+    let tx_status = use_signal(|| "".to_string());
 
     let on_connect = move |_| {
         spawn_local({
-            let mut address = address.clone();
-            let mut wrappers = wrappers.clone();
-            let mut from_selected = from_selected.clone();
-            let mut to_selected = to_selected.clone();
+            let mut address = address;
+            let mut wrappers = wrappers;
+            let mut from_selected = from_selected;
+            let mut to_selected = to_selected;
 
             async move {
                 let addr = connect_metamask().await;
@@ -92,11 +90,11 @@ pub fn App() -> Element {
                 match fetch_wrappers(factory_address).await {
                     Ok(list) => {
                         if let Some(first) = list.first() {
-                            let (from,to) = update_pair(&first.dTokenSymbol, &list);
+                            let (from,to) = update_pair(&first.d_token_symbol, &list);
                             to_selected.set(to);
                             from_selected.set(from);
-                            if let Ok(bal) = from_value::<String>(get_token_balance(&addr, &first.dTokenAddress).await) {
-                                log::debug!("GetTokenBalance of address {} for token address {} :{:?}",addr, first.dTokenAddress, bal);
+                            if let Ok(bal) = from_value::<String>(get_token_balance(&addr, &first.d_token_address).await) {
+                                log::debug!("GetTokenBalance of address {} for token address {} :{:?}",addr, first.d_token_address, bal);
                                 balance.set(bal);
                             }
                         }
@@ -112,15 +110,14 @@ pub fn App() -> Element {
     use_effect(move || {
         let from_sel = from_selected().clone();
         let addr = address.read().clone();
-        let mut balance = balance.clone();
+        let mut balance = balance;
 
         spawn_local(async move {
-            if let Some(from_sel) = from_sel {
-                if let Ok(bal) = from_value::<String>(get_token_balance(&addr, &from_sel.address).await) {
+            if let Some(from_sel) = from_sel
+                && let Ok(bal) = from_value::<String>(get_token_balance(&addr, &from_sel.address).await) {
                     log::debug!("GetTokenBalance of address {} for token address {} :{:?}",addr, from_sel.address, bal);
                     balance.set(bal);
                 }
-            }
         });
     });
 
@@ -137,15 +134,15 @@ pub fn App() -> Element {
                         fee.set("".to_string())
                     }else{
                         let payed_fee = if matches!(from_sel.token_type, TokenType::DToken){
-                            wrapper.fees.inBps
+                            wrapper.fees.in_bps
                         }else{
-                            wrapper.fees.outBps
+                            wrapper.fees.out_bps
                         };
                         let mut payed_fee = curr_amount.get_absolute() * U256::from(payed_fee) / U256::from(1000);
                         if from_sel.decimals > to_sel.decimals{
-                            payed_fee = payed_fee / U256::from(10^(from_sel.decimals - to_sel.decimals))
+                            payed_fee /= U256::from(10^(from_sel.decimals - to_sel.decimals))
                         }else if from_sel.decimals < to_sel.decimals{
-                            payed_fee = payed_fee * U256::from(10^(to_sel.decimals - from_sel.decimals))
+                            payed_fee *= U256::from(10^(to_sel.decimals - from_sel.decimals))
                         }
                         let amount_o = curr_amount.get_absolute() - payed_fee;
                         if let Ok(amount_o) = format_units(amount_o, to_sel.decimals as u8){
@@ -211,8 +208,8 @@ pub fn App() -> Element {
                                         to_selected.set(to);
                                     },
                                     { current_wrappers.iter().map(|t| rsx!(
-                                        option { value: "{t.dTokenSymbol}", "{t.dTokenSymbol}" },
-                                        option { value: "{t.cAssetSymbol}", "{t.cAssetSymbol}" }
+                                        option { value: "{t.d_token_symbol}", "{t.d_token_symbol}" },
+                                        option { value: "{t.c_asset_symbol}", "{t.c_asset_symbol}" }
                                     )) }
                                 }
                           }
@@ -278,11 +275,11 @@ pub fn App() -> Element {
                     button {
                         class: "mt-6 w-full py-3 text-lg font-semibold rounded-xl btn-gradient",
                         onclick: move |_| {
-                            let mut tx_status = tx_status.clone();
+                            let mut tx_status = tx_status;
                             if let (Some(from_selected), Some(to_selected)) = (from_selected.read().clone(), to_selected.read().clone()){
                                 spawn_local({
                                     async move {
-                                        tx_status.set(format!("Exchange ..."));
+                                        tx_status.set("Exchange ...".to_string());
                                         let res = if matches!(from_selected.token_type, TokenType::DToken){
                                             wrap_tokens(router_address,&from_selected.address.to_string(), &amount.read(),&to_selected.address.to_string()).await
                                         } else {

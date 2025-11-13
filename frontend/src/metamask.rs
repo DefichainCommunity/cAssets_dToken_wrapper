@@ -3,21 +3,24 @@ use serde::Deserialize;
 use serde_wasm_bindgen::from_value;
 
 #[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenWrapperInfo {
+    #[allow(dead_code)]
     pub wrapper: String,
-    pub dTokenSymbol: String,
-    pub dTokenAddress: String,
-    pub dTokenDecimals: u64,
-    pub cAssetSymbol: String,
-    pub cAssetAddress: String,
-    pub cAssetDecimals: u64,
+    pub d_token_symbol: String,
+    pub d_token_address: String,
+    pub d_token_decimals: u64,
+    pub c_asset_symbol: String,
+    pub c_asset_address: String,
+    pub c_asset_decimals: u64,
     pub fees: Fees,
 }
 
 #[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Fees {
-    pub inBps: u64,
-    pub outBps: u64,
+    pub in_bps: u64,
+    pub out_bps: u64,
 }
 
 // Bind JS functions in metamask.js
