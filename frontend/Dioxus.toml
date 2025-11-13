@@ -1,9 +1,9 @@
 [application]
-name = "cAssets dToken Wrapper"
+name = "cAssets_dToken_Wrapper"
 default_platform = "web"
 
 [web.app]
-title = "cAssets dToken Wrapper"
+title = "cAssets_dToken_Wrapper"
 base_path = "cAssets_dToken_wrapper"
 ## keeps CSP happy
 csp_hash = true

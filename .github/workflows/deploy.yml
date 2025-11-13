@@ -26,12 +26,12 @@ jobs:
 
       - name: Build Dioxus Web App (in frontend/)
         working-directory: frontend
-        run: dx build --release
+        run: dx build
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend/target/dx/dioxus_meta_app/release/web/public
+          path: frontend/target/dx/dioxus_meta_app/debug/web/public
 
   deploy:
     runs-on: ubuntu-latest
