@@ -1,0 +1,81 @@
+@import "tailwindcss";
+@source "./src/**/*.{rs,html,css}";
+@theme {
+    --font-sans: "Inter var", sans-serif;
+    --color-cryptofactor: #0b0230;
+    --color-defichain: #ff00af;
+    --color-bg-from: #0b0230; /* dark start */
+    --color-bg-mid:  #1c0430; /* mid gradient */
+    --color-bg-to:  #2a0640;  /* dark end */
+}
+
+/* Glassmorphism card */
+.glass {
+    backdrop-filter: blur(12px);
+    background: var(--color-bg-to);/*rgba(11, 2, 48, 0.75);*/ /* dark purple base */
+    border-radius: 2rem;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.25);
+    color: white;
+}
+
+/* Panels inside card */
+.panel {
+    background: var(--color-bg-to);/*rgba(11, 2, 48, 0.6);*/
+    border-radius: 1rem;
+    padding: 1rem;
+    color: white;
+}
+
+/* Gradient Buttons */
+.btn-gradient {
+    background: linear-gradient(90deg, var(--color-defichain), var(--color-cryptofactor));
+    color: white;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border-radius: 1rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.btn-gradient:hover {
+    opacity: 0.9;
+    transform: scale(1.05);
+}
+
+/* Token Badges */
+.token-badge-defi {
+    background: var(--color-defichain);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+}
+.token-badge-cf {
+    background: var(--color-cryptofactor);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+}
+
+/* Select dropdown */
+select {
+    background-color: rgba(255,255,255,0.05);
+    color: white;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+option {
+    background-color: #0b0230;
+    color: white;
+}
+
+/* Utility gradients */
+.from-dfi { background-color: var(--color-defichain); }
+.to-cfr { background-color: var(--color-cryptofactor); }
+
+/* Responsive */
+@media (max-width: 640px) {
+    .flex-col-sm { flex-direction: column; }
+}
