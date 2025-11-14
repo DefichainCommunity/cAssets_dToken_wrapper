@@ -13,5 +13,3 @@ minify_js = false
 [web.wasm]
 ## ensures WASM + JS are together
 mode = "bundled"
-## forces Dioxus to generate the snippets/ folder for wasm-bindgen helpers
-## snippets = true
