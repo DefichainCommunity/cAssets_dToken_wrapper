@@ -2,7 +2,7 @@ use alloy::primitives::{utils::{format_units, parse_units},U256};
 use dioxus::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use serde_wasm_bindgen::from_value;
-use crate::metamask::{TokenWrapperInfo, connect_metamask, get_token_balance, fetch_wrappers, wrap_tokens, unwrap_tokens};
+use crate::metamask::{TokenWrapperInfo, connect_metamask, get_token_balance, get_all_wrappers, wrap_tokens, unwrap_tokens};
 
 #[derive(Clone, Debug)]
 struct TokenInfo {
@@ -84,23 +84,27 @@ pub fn App() -> Element {
             let mut to_selected = to_selected;
 
             async move {
-                let addr = connect_metamask().await;
-                address.set(addr.as_string().unwrap_or_default());
-                let addr = address.read().clone();
-                match fetch_wrappers(factory_address).await {
-                    Ok(list) => {
-                        if let Some(first) = list.first() {
-                            let (from,to) = update_pair(&first.d_token_symbol, &list);
-                            to_selected.set(to);
-                            from_selected.set(from);
-                            if let Ok(bal) = from_value::<String>(get_token_balance(&addr, &first.d_token_address).await) {
-                                log::debug!("GetTokenBalance of address {} for token address {} :{:?}",addr, first.d_token_address, bal);
-                                balance.set(bal);
-                            }
+                match connect_metamask().await{
+                    Ok(addr) => {
+                        address.set(addr);
+                        let addr = address.read().clone();
+                        match get_all_wrappers(factory_address).await {
+                            Ok(list) => {
+                                if let Some(first) = list.first() {
+                                    let (from,to) = update_pair(&first.d_token_symbol, &list);
+                                    to_selected.set(to);
+                                    from_selected.set(from);
+                                    if let Ok(bal) = get_token_balance(&addr, &first.d_token_address).await {
+                                        log::debug!("GetTokenBalance of address {} for token address {} :{:?}",addr, first.d_token_address, bal);
+                                        balance.set(bal);
+                                    }
+                                }
+                                wrappers.set(list);
+                            },
+                            Err(e) => log::error!("Error fetching wrappers: {:?}", e)
                         }
-                        wrappers.set(list);
                     },
-                    Err(e) => log::error!("Error fetching wrappers: {:?}", e)
+                    Err(e) => log::error!("Error connecting metamask: {:?}", e)
                 }
             }
         });
@@ -114,7 +118,7 @@ pub fn App() -> Element {
 
         spawn_local(async move {
             if let Some(from_sel) = from_sel
-                && let Ok(bal) = from_value::<String>(get_token_balance(&addr, &from_sel.address).await) {
+                && let Ok(bal) = get_token_balance(&addr, &from_sel.address).await {
                     log::debug!("GetTokenBalance of address {} for token address {} :{:?}",addr, from_sel.address, bal);
                     balance.set(bal);
                 }
@@ -285,8 +289,8 @@ pub fn App() -> Element {
                                         } else {
                                             unwrap_tokens(router_address, &from_selected.address.to_string(), &amount.read(), &to_selected.address.to_string()).await
                                         };
-                                        tx_status.set(format!("{:?}", serde_wasm_bindgen::from_value::<String>(res)));
-                                        if let Ok(bal) = from_value::<String>(get_token_balance(&address(), &from_selected.address.to_string()).await) {
+                                        tx_status.set(format!("{:?}", res));
+                                        if let Ok(bal) = get_token_balance(&address(), &from_selected.address.to_string()).await {
                                             log::debug!("TokenBalance {:?}",bal);
                                             balance.set(bal);
                                         }
