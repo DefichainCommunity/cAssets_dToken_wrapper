@@ -1,0 +1,44 @@
+#Overview
+
+        ┌─────────────┐
+        │   User      │
+        │ (approves)  │
+        └─────┬───────┘
+              │ wrap/unwrap call
+              ▼
+ ┌───────────────────────────┐
+ │ CAssetDTokenWrapRouter    │
+ │  - AccessControl: MANAGER │
+ │  - NonReentrant           │
+ └─────────┬─────────────────┘
+           │
+           │ transferFrom user → wrapper
+           ▼
+ ┌────────────────────────────┐
+ │ CAssetDTokenWrapUpgradeable│
+ │  - AccessControl: WRAPPER  │
+ │  - NonReentrant            │
+ │  - Fee split (dToken)      │
+ │  - Calls treasuries        │
+ └─────────┬──────────────────┘
+           │ ## wrap
+           │ reclaim net dToken → dToken Treasury
+           │                fee → feeRecipient
+           │ dispense net amount → user (cAsset)
+           │─────────────────────────┐
+           │                         │ dispense cAsset
+           ▼                         ▼
+ ┌───────────────────────────┐┌─────────────────────────────────┐
+ │ TokenTreasury (dToken)    ││ TokenTreasury (cAsset)          │
+ │  - AccessControl: WRAPPER ││  - AccessControl: WRAPPER       │
+ │  - Keeps net + fee logic  ││  - Receives cAsset from wrapper │
+ └───────────────────────────┘└─────────────────────────────────┘
+
+
+#Running mock of defichain testent with anvil:
+## Start anvil with defichain testnet
+anvil -f 127.0.0.1:18551 --hardfork shanghai
+## Export first private key
+export PRIVATE_KEY=XYZ
+## Deploy anvil mock
+forge script --legacy script/DeploySystemMock.s.sol:DeploySystem --rpc-url http://127.0.0.1:8545 --private-key $PRIVATE_KEY --broadcast
