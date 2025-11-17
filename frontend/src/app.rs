@@ -142,7 +142,7 @@ pub fn App() -> Element {
                         }else{
                             wrapper.fees.out_bps
                         };
-                        let mut payed_fee = curr_amount.get_absolute() * U256::from(payed_fee) / U256::from(1000);
+                        let mut payed_fee = curr_amount.get_absolute() * U256::from(payed_fee) / U256::from(10000);
                         if from_sel.decimals > to_sel.decimals{
                             payed_fee /= U256::from(10^(from_sel.decimals - to_sel.decimals))
                         }else if from_sel.decimals < to_sel.decimals{
