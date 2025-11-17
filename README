@@ -1,0 +1,40 @@
+# Multi‑Wrapper Router Project
+
+## Overview
+This project implements a *multi‑pair* cAsset/dToken wrapper contract and a corresponding router contract with upgradeability.
+The frontend is built with Rust + Dioxus + WASM to use with MetaMask.
+
+## Structure
+- `contract/`: Solidity smart contract (upgradeable via UUPS), tests, deployment script
+- `frontend/`: Dioxus + Rust frontend, static assets
+
+## Setup
+
+### Contract
+#### Initialize
+1. Install Foundry (`curl -L https://foundry.paradigm.xyz | bash`, then `foundryup`).
+2. In `contract/`, install dependencies, compile:
+   ```bash
+   forge install OpenZeppelin/openzeppelin-contracts-upgradeable
+   forge build
+   forge test
+
+
+#### Deploy
+1. Set environment variables in .env
+   ```ini
+   RPC_URL=…
+   PRIVATE_KEY=…
+2. Deploy:
+   ```bash
+   source .env
+   forge script script/DeploySystem{Mock,Testnet, Mainnet}.s.sol:DeploySystem \
+      --rpc-url $RPC_URL \
+      --broadcast \
+      --verify
+
+### Frontend
+1. In `frontend/`, build the WASM app (e.g., `dx build --release` or equivalent).
+2. Ensure the contract address (deployed) is updated in `frontend/src/main.rs`.
+3. Serve the frontend (e.g., `python3 -m http.server` in `frontend/target/dx/dioxus_meta_app/debug/web/public`).
+4. Connect MetaMask to the correct network, approve underlying tokens, and use the UI to Wrap/Unwrap.

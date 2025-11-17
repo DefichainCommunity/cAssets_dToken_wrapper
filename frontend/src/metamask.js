@@ -27,11 +27,10 @@ export async function js_connect_metamask() {
 
 // ERC20
 export async function js_get_token_balance(user, token) {
-    const abi = ["function balanceOf(address) view returns (uint256)",
-                 "function decimals() view returns (uint8)"];
+    const abi = ["function balanceOf(address) view returns (uint256)"];
     try {
         const erc20 = new ethers.Contract(token, abi, provider);
-        const [bal, decimals] = await Promise.all([erc20.balanceOf(user), erc20.decimals()]);
+        const [bal, decimals] = await Promise.all([erc20.balanceOf(user), 18]);
         return {
             ok: true,
             value: JSON.stringify(ethers.formatUnits(bal, decimals))
@@ -66,25 +65,19 @@ export async function js_get_all_wrappers(factoryAddress) {
 
                 const dTokenContract = new ethers.Contract(
                     info.dTokenAddress,
-                    ["function symbol() view returns (string)", "function decimals() view returns (uint8)"],
+                    ["function symbol() view returns (string)"],
                     provider
                 );
 
-                const [dtoken_symbol, dtoken_decimals] = await Promise.all([
-                    dTokenContract.symbol(),
-                    dTokenContract.decimals()
-                ]);
+                const dtoken_symbol = await dTokenContract.symbol();
 
                 const cAssetContract = new ethers.Contract(
                     info.cAssetAddress,
-                    ["function symbol() view returns (string)", "function decimals() view returns (uint8)"],
+                    ["function symbol() view returns (string)"],
                     provider
                 );
 
-                const [casset_symbol, casset_decimals] = await Promise.all([
-                    cAssetContract.symbol(),
-                    cAssetContract.decimals()
-                ]);
+                const casset_symbol= await cAssetContract.symbol();
 
 
                 tokenList.push({

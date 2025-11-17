@@ -54,8 +54,8 @@ fn token_pair_to_wrapper(token_a: &Option<TokenInfo>, token_b: &Option<TokenInfo
 
 #[component]
 pub fn App() -> Element {
-    let factory_address = "0x4826533B4897376654Bb4d4AD88B7faFD0C98528";
-    let router_address = "0x998abeb3E57409262aE5b751f60747921B33613E";
+    let factory_address = "0xE521e9e0d066e7ba3702833E7B535Be6DE2fa41b";
+    let router_address = "0x7081cbaDb76F0df8eeB9889EFC821aFE6a451622";
 
     let address = use_signal(|| "".to_string());
     let short = address.with(|addr| {
@@ -142,7 +142,7 @@ pub fn App() -> Element {
                         }else{
                             wrapper.fees.out_bps
                         };
-                        let mut payed_fee = curr_amount.get_absolute() * U256::from(payed_fee) / U256::from(1000);
+                        let mut payed_fee = curr_amount.get_absolute() * U256::from(payed_fee) / U256::from(10000);
                         if from_sel.decimals > to_sel.decimals{
                             payed_fee /= U256::from(10^(from_sel.decimals - to_sel.decimals))
                         }else if from_sel.decimals < to_sel.decimals{
