@@ -53,7 +53,7 @@ export async function js_get_all_wrappers(factoryAddress) {
         const factoryAbi = ["function getAllWraps() view returns (address[])"];
         const factory = new ethers.Contract(factoryAddress, factoryAbi, provider);
         // Wrapper ABI
-        const wrapperAbi = ["function info() view returns (tuple(address dTokenAddress, address cAssetAddress, uint8 dTokenDecimals, uint8 cAssetDecimals, uint256 dTokenInFeeBps, uint256 dTokenOutFeeBps, address dTokenTreasury, address cAssetTreasury))"];
+        const wrapperAbi = ["function info() view returns (tuple(address dTokenAddress, address cAssetAddress, uint8 dTokenDecimals, uint8 cAssetDecimals, uint256 dTokenInFeeBps, uint256 dTokenOutFeeBps))"];
         const wrapAddresses = await factory.getAllWraps();
         // console.log("WrapAddresses:", wrapAddresses);
         const tokenList = [];
