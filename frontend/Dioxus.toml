@@ -1,0 +1,15 @@
+[application]
+name = "cAssets_dToken_Wrapper"
+default_platform = "web"
+
+[web.app]
+title = "cAssets_dToken_Wrapper"
+base_path = "cAssets_dToken_wrapper"
+## keeps CSP happy
+csp_hash = true
+## avoids SWC minifier errors
+minify_js = false
+
+[web.wasm]
+## ensures WASM + JS are together
+mode = "bundled"
