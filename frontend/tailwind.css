@@ -4,9 +4,36 @@
     --font-sans: "Inter var", sans-serif;
     --color-cryptofactor: #0b0230;
     --color-defichain: #ff00af;
+    --color-dextradinglive: #ef9d10;
+    --color-dextradinglive-hover: #ffbf32;
     --color-bg-from: #0b0230; /* dark start */
     --color-bg-mid:  #1c0430; /* mid gradient */
     --color-bg-to:  #2a0640;  /* dark end */
+}
+
+:root {
+  --header-height: 88px; /* fallback */
+}
+
+@media (min-width: 640px) {
+  :root {
+    --header-height: 96px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --header-height: 104px;
+  }
+}
+
+@keyframes fadeSlideIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.fade-slide-in {
+  animation: fadeSlideIn 0.35s ease-out forwards;
 }
 
 /* Glassmorphism card */
@@ -26,6 +53,9 @@
     padding: 1rem;
     color: white;
 }
+
+/* .text-gray-300 { @apply text-gray-300; } */
+/* .hover\:text-gray-100:hover { @apply text-gray-100; } */
 
 /* Gradient Buttons */
 .btn-gradient {
@@ -50,7 +80,7 @@
     border-radius: 0.5rem;
     font-weight: 600;
 }
-.token-badge-cf {
+.token-badge-cfr {
     background: var(--color-cryptofactor);
     color: white;
     padding: 0.25rem 0.5rem;

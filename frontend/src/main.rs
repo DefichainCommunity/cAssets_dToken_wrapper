@@ -1,5 +1,9 @@
 mod app;
+mod components;
 mod metamask;
+mod vanillaswap;
+mod wrapper;
+mod wallet_context;
 
 fn main() {
     // Launch the root component
