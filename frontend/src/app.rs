@@ -1,10 +1,16 @@
 use dioxus::prelude::*;
+use std::collections::BTreeMap;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 use serde_wasm_bindgen::from_value;
 use wasm_bindgen::closure::Closure;
+use crate::metamask::uniswap_v3::V3PoolState;
 use crate::metamask::{connect_metamask, MetamaskInfo, js_on_chain_changed, js_on_accounts_changed};
-use crate::vanillaswap::swap_v2::Swap;
+use crate::vanillaswap::swap_v2::PoolV2Swap;
+use crate::vanillaswap::swap_v3::PoolV3Swap;
+use crate::vanillaswap::v3::{use_sync_v3_pools, V3PoolInfo, UniswapV3PoolContext};
+use crate::vanillaswap::v2::{use_sync_v2_pools, UniswapV2PoolContext};
+use crate::metamask::uniswap_v2::V2PairInfo;
 use crate::wrapper::Wrapper;
 use crate::vanillaswap::pools_v2::PoolV2Pairs;
 use crate::vanillaswap::pools_v3::PoolV3Pairs;
@@ -16,6 +22,7 @@ enum Tab {
     Wrap,
     SwapV2,
     PoolV2,
+    SwapV3,
     PoolV3,
 }
 
@@ -75,6 +82,41 @@ pub fn App() -> Element {
     });
 
     init_metamask_listeners();
+
+    // uniswap v3
+    {
+        let pairs       = use_signal(|| Vec::<V3PoolInfo>::new());
+        let pool_state  = use_signal(|| BTreeMap::new());
+        let is_loading  = use_signal(|| false);
+        let error       = use_signal(|| None);
+        let router_address = use_signal(|| "".to_string());
+
+        use_context_provider(|| UniswapV3PoolContext {
+            pairs,
+            pool_state,
+            router_address,
+            is_loading,
+            error,
+        });
+
+        use_sync_v3_pools();
+    }
+
+    {
+        let is_loading = use_signal(|| false);
+        let pairs = use_signal(|| Vec::<V2PairInfo>::new());
+        let error = use_signal(|| None::<String>);
+        let router_address = use_signal(|| "".to_string());
+        use_context_provider(|| UniswapV2PoolContext {
+            pairs,
+            router_address,
+            is_loading,
+            error,
+        });
+
+        use_sync_v2_pools();
+    }
+
 
     let on_connect = move |_| {
         let mut wallet = use_wallet();
@@ -136,10 +178,17 @@ pub fn App() -> Element {
                       }
 
                       button {
+                          class: button_class(Tab::SwapV3, active_tab()),
+                          onclick: move |_| active_tab.set(Tab::SwapV3),
+                          "SwapV3"
+                      }
+
+                      button {
                           class: button_class(Tab::PoolV3, active_tab()),
                           onclick: move |_| active_tab.set(Tab::PoolV3),
                           "PoolsV3"
                       }
+
 
                 }
 
@@ -165,8 +214,9 @@ pub fn App() -> Element {
 
                 match *active_tab.read() {
                     Tab::Wrap => rsx!(Wrapper{}),
-                    Tab::SwapV2 => rsx!(Swap{}),
+                    Tab::SwapV2 => rsx!(PoolV2Swap{}),
                     Tab::PoolV2 => rsx!(PoolV2Pairs{}),
+                    Tab::SwapV3 => rsx!(PoolV3Swap{}),
                     Tab::PoolV3 => rsx!(PoolV3Pairs{}),
                 }
             }
