@@ -1,23 +1,38 @@
 //import { ethers } from "./ethers.min.js";
 import { ethers } from "https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js";
 
-let provider;
-let signer;
+// const provider;
+// let signer;
+
+/**
+ * helper JSON stringify that converts BigInt to string
+ */
+function safeStringify(obj) {
+  return JSON.stringify(obj, (k, v) =>
+    typeof v === "bigint" ? v.toString() : v
+  );
+}
 
 // METAMASK
 export async function js_connect_metamask() {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
-        provider = new ethers.BrowserProvider(window.ethereum);
-        signer = await provider.getSigner();
+        let provider = new ethers.BrowserProvider(window.ethereum);
+        let signer = await provider.getSigner();
         const addr = await signer.getAddress();
+        const network = await provider.getNetwork();
+        //console.log("Address", addr)
+        // console.log("ChainId", network.chainId)
         return {
             ok: true,
-            value: JSON.stringify(addr)
+            value: safeStringify({
+                address: addr,
+                chainId: network.chainId
+            })
         };
     }catch (err) {
-        console.error(err);
+        console.error("Metamask connect error:",err);
         return {
             ok: false,
             value: err.reason || err.message || "Unknown error"
@@ -25,10 +40,31 @@ export async function js_connect_metamask() {
     }
 }
 
+export function js_on_chain_changed(callback) {
+    if (window.ethereum) {
+        window.ethereum.on('chainChanged', (chainId) => {
+            const numericChainId = parseInt(chainId, 16);
+            callback(numericChainId);
+        });
+    }
+}
+
+export function js_on_accounts_changed(callback) {
+    if (window.ethereum) {
+        window.ethereum.on('accountsChanged', (accounts) => {
+            callback(accounts);
+        });
+    }
+}
+
 // ERC20
 export async function js_get_token_balance(user, token) {
     const abi = ["function balanceOf(address) view returns (uint256)"];
     try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+
         const erc20 = new ethers.Contract(token, abi, provider);
         const [bal, decimals] = await Promise.all([erc20.balanceOf(user), 18]);
         return {
@@ -46,76 +82,85 @@ export async function js_get_token_balance(user, token) {
 
 // FACTORY
 export async function js_get_all_wrappers(factoryAddress) {
-    // Factory ABI
-    console.log("GetAllWrappers called");
     try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+
+        // Factory ABI
         const factoryAbi = ["function getAllWraps() view returns (address[])"];
         const factory = new ethers.Contract(factoryAddress, factoryAbi, provider);
+
         // Wrapper ABI
-        const wrapperAbi = ["function info() view returns (tuple(address dTokenAddress, address cAssetAddress, uint8 dTokenDecimals, uint8 cAssetDecimals, uint256 dTokenInFeeBps, uint256 dTokenOutFeeBps))"];
+        const wrapperAbi = [
+            "function info() view returns (tuple(address dTokenAddress, address cAssetAddress, uint8 dTokenDecimals, uint8 cAssetDecimals, uint256 dTokenInFeeBps, uint256 dTokenOutFeeBps))"
+        ];
+
         const wrapAddresses = await factory.getAllWraps();
-        // console.log("WrapAddresses:", wrapAddresses);
-        const tokenList = [];
 
-        for (const wrapperAddr of wrapAddresses) {
-            console.log("WrapperAddress:", wrapperAddr);
+        // 1. Fetch all wrapper infos in parallel
+        const wrapperInfos = await Promise.all(
+            wrapAddresses.map(async (wrapperAddr) => {
+                try {
+                    const wrapper = new ethers.Contract(wrapperAddr, wrapperAbi, provider);
+                    const info = await wrapper.info();
+                    return { wrapperAddr, info };
+                } catch (err) {
+                    console.warn("Skipping wrapper", wrapperAddr, err);
+                    return null;
+                }
+            })
+        );
+
+        // Filter out nulls
+        const validWrappers = wrapperInfos.filter(Boolean);
+
+        // 2. Deduplicate token addresses
+        const uniqueTokens = [
+            ...new Set(validWrappers.flatMap(w => [w.info.dTokenAddress, w.info.cAssetAddress]))
+        ];
+
+        // 3. Fetch all token symbols in parallel
+        const erc20Abi = ["function symbol() view returns (string)"];
+        const symbolMap = {};
+        await Promise.all(uniqueTokens.map(async (addr) => {
             try {
-                const wrapper = new ethers.Contract(wrapperAddr, wrapperAbi, provider);
-                const info = await wrapper.info();
-
-                const dTokenContract = new ethers.Contract(
-                    info.dTokenAddress,
-                    ["function symbol() view returns (string)"],
-                    provider
-                );
-
-                const dtoken_symbol = await dTokenContract.symbol();
-
-                const cAssetContract = new ethers.Contract(
-                    info.cAssetAddress,
-                    ["function symbol() view returns (string)"],
-                    provider
-                );
-
-                const casset_symbol= await cAssetContract.symbol();
-
-
-                tokenList.push({
-                    wrapper: wrapperAddr,
-                    dTokenSymbol: dtoken_symbol,
-                    dTokenAddress: info.dTokenAddress,
-                    dTokenDecimals: info.dTokenDecimals,
-                    cAssetSymbol: casset_symbol,
-                    cAssetAddress: info.cAssetAddress,
-                    cAssetDecimals: info.cAssetDecimals,
-                    fees: {
-                        inBps: info.dTokenInFeeBps,
-                        outBps: info.dTokenOutFeeBps
-                    }
-                });
-            } catch (err) {
-                console.warn("Skipping wrapper", wrapperAddr, err);
+                const token = new ethers.Contract(addr, erc20Abi, provider);
+                symbolMap[addr] = await token.symbol();
+            } catch (_) {
+                symbolMap[addr] = null;
             }
-        }
-        return {
-            ok: true,
-            value: JSON.stringify(tokenList , (key, value) =>
-                typeof value === "bigint" ? value.toString() : value
-            )
-        };
-    } catch (err) {
-        return {
-            ok: false,
-            value: err.reason || err.message || "Unknown error"
-        };
+        }));
 
+        // 4. Build final token list
+        const tokenList = validWrappers.map(({ wrapperAddr, info }) => ({
+            wrapper: wrapperAddr,
+            dTokenSymbol: symbolMap[info.dTokenAddress] ?? null,
+            dTokenAddress: info.dTokenAddress,
+            dTokenDecimals: info.dTokenDecimals,
+            cAssetSymbol: symbolMap[info.cAssetAddress] ?? null,
+            cAssetAddress: info.cAssetAddress,
+            cAssetDecimals: info.cAssetDecimals,
+            fees: {
+                inBps: info.dTokenInFeeBps,
+                outBps: info.dTokenOutFeeBps
+            }
+        }));
+
+        return { ok: true, value: safeStringify(tokenList) };
+    } catch (err) {
+        return { ok: false, value: err.reason || err.message || "Unknown error" };
     }
 }
-
 
 // ROUTER
 export async function js_wrap_tokens(contractAddress, dToken, amount, cAsset) {
     try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+        let signer = await provider.getSigner();
+
         const abi = ["function wrap(address dTokent, uint256 amount, address cAsset) external"];
         const approveAbi = ["function approve(address spender, uint256 amount) external returns (bool)",
                            "function decimals() view returns (uint8)"];
@@ -146,6 +191,11 @@ export async function js_wrap_tokens(contractAddress, dToken, amount, cAsset) {
 
 export async function js_unwrap_tokens(contractAddress, cAsset, amount, dToken) {
     try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+        let signer = await provider.getSigner();
+
         const abi = ["function unwrap(address cAsset, uint256 amount, address dToken) external"];
         const approveAbi = ["function approve(address spender, uint256 amount) external returns (bool)",
                            "function decimals() view returns (uint8)"];
@@ -170,5 +220,192 @@ export async function js_unwrap_tokens(contractAddress, cAsset, amount, dToken) 
             ok: false,
             value: err.reason || err.message || "Unknown error"
         };
+    }
+}
+
+
+//UniSwap
+const erc20abi = [
+    "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)"
+];
+
+export async function js_get_uniswap_v2_pairs(routerAddr) {
+    try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+
+        // Minimal ABIs
+        const routerAbi = ["function factory() view returns (address)"];
+        const factoryAbi = [
+            "function allPairsLength() view returns (uint256)",
+            "function allPairs(uint256) view returns (address)"
+        ];
+        const pairAbi = [
+            "function token0() view returns (address)",
+            "function token1() view returns (address)",
+            "function getReserves() view returns (uint112,uint112,uint32)"
+        ];
+        const erc20Abi = [
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)"
+        ];
+
+        // 1. Get factory address
+        const router = new ethers.Contract(routerAddr, routerAbi, provider);
+        const factoryAddr = await router.factory();
+        const factory = new ethers.Contract(factoryAddr, factoryAbi, provider);
+
+        // 2. Get number of pairs
+        const len = Number(await factory.allPairsLength());
+
+        // 3. Fetch all pair addresses in parallel
+        const pairAddrs = await Promise.all(
+            Array.from({ length: len }, (_, i) => factory.allPairs(i))
+        );
+
+        // 4. Fetch token0/token1/reserves for all pairs in parallel
+        const tokenPairs = await Promise.all(
+            pairAddrs.map(async (pairAddr) => {
+                try {
+                    const pair = new ethers.Contract(pairAddr, pairAbi, provider);
+                    const [token0, token1] = await Promise.all([pair.token0(), pair.token1()]);
+
+                    let reserve0 = null, reserve1 = null;
+                    try {
+                        const r = await pair.getReserves();
+                        reserve0 = r[0].toString();
+                        reserve1 = r[1].toString();
+                    } catch (_) {}
+
+                    return { pairAddr, token0, token1, reserve0, reserve1 };
+                } catch (_) {
+                    return { pairAddr, token0: null, token1: null, reserve0: null, reserve1: null };
+                }
+            })
+        );
+
+        // 5. Deduplicate tokens to minimize symbol/decimals calls
+        const uniqueTokens = [...new Set(tokenPairs.flatMap(p => [p.token0, p.token1]).filter(Boolean))];
+        const tokenInfoMap = {};
+
+        await Promise.all(
+            uniqueTokens.map(async (tokenAddr) => {
+                try {
+                    const token = new ethers.Contract(tokenAddr, erc20Abi, provider);
+                    const [symbol, decimals] = await Promise.all([
+                        token.symbol().catch(() => null),
+                        token.decimals().catch(() => null)
+                    ]);
+                    tokenInfoMap[tokenAddr] = { symbol, decimals };
+                } catch (_) {
+                    tokenInfoMap[tokenAddr] = { symbol: null, decimals: null };
+                }
+            })
+        );
+
+        // 6. Build final pairs array
+        const pairs = tokenPairs.map(p => ({
+            pair_address: p.pairAddr,
+            token0: p.token0,
+            token1: p.token1,
+            symbol0: tokenInfoMap[p.token0]?.symbol ?? null,
+            symbol1: tokenInfoMap[p.token1]?.symbol ?? null,
+            decimals0: tokenInfoMap[p.token0]?.decimals ?? null,
+            decimals1: tokenInfoMap[p.token1]?.decimals ?? null,
+            reserve0: p.reserve0,
+            reserve1: p.reserve1
+        }));
+
+        return { ok: true, value: safeStringify(pairs) };
+    } catch (err) {
+        return { ok: false, value: err?.message || String(err) };
+    }
+}
+
+export async function js_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, routerAddress) {
+    try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+        let signer = await provider.getSigner();
+
+        const routerAbi = [
+            "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[])"
+        ];
+        const tokenAbi = [ "function approve(address spender, uint256 value) public returns (bool)", "function decimals() view returns (uint8)" ];
+
+        const router = new ethers.Contract(routerAddress, routerAbi, signer);
+
+        const tokenInContract = new ethers.Contract(tokenIn, tokenAbi, signer);
+        const decimals = await tokenInContract.decimals();
+        const amount_in_u256 = amountIn;//thers.parseUnits(amountIn,decimals);
+
+        // Approve
+        const approveTx = await tokenInContract.approve(routerAddress, amount_in_u256);
+        await approveTx.wait();
+
+        const path = [tokenIn, tokenOut];
+        const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            amountIn,
+            amountOutMin,
+            path,
+            await signer.getAddress(),
+            deadline,
+        );
+        const receipt = await tx.wait();
+
+        return {
+            ok: true,
+            value: JSON.stringify(`${receipt.hash}`)
+        };
+    } catch (err) {
+        console.error(err);
+        return { ok: false, value: err?.reason || err?.message || String(err) };
+    }
+}
+
+
+/// UniSwap V3
+export async function js_get_uniswap_v3_pool_states(poolAddrs) {
+    const poolAbi = [ "function slot0() view returns (uint160 sqrtPriceX96, int24, uint16, uint16, uint16, uint8, bool)", "function liquidity() view returns (uint128)" ];
+
+    try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+
+        // build all calls in parallel
+        const results = await Promise.all(poolAddrs.map(async (poolAddr) => {
+            try {
+                const pool = new ethers.Contract(poolAddr, poolAbi, provider);
+
+                // parallel call slot0 + liquidity
+                const [slot0, liquidity] = await Promise.all([pool.slot0(), pool.liquidity()]);
+
+                return [poolAddr, {
+                    sqrtPriceX96: slot0.sqrtPriceX96.toString(),
+                    liquidity: liquidity.toString()
+                }];
+            } catch (err) {
+                console.warn("Error fetching pool", poolAddr, err);
+                return [poolAddr, null];
+            }
+        }));
+
+        // convert to object mapping
+        const map = {};
+        for (const [poolAddr, value] of results) {
+            map[poolAddr] = value;
+        }
+
+        return { ok: true, value: safeStringify(map) };
+
+    } catch (err) {
+        console.error(err);
+        return { ok: false, value: err?.reason || err?.message || String(err) };
     }
 }
