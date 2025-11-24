@@ -3,15 +3,15 @@ use wasm_bindgen_futures::spawn_local;
 use alloy::primitives::{utils::parse_units,U256};
 use crate::metamask::{
     get_token_balance,
-    uniswap_v2::uniswap_v2_swap_tokens
+    uniswap_v3::uniswap_v3_swap_tokens
 };
 use crate::wrapper::TokenInfo;
 use crate::wallet_context::use_wallet;
-use super::v2::{approx_amount_out, unique_pool_tokens, use_v2_pools};
+use super::v3::{approx_amount_out, unique_pool_tokens, use_v3_pools};
 
 #[component]
-pub fn PoolV2Swap() -> Element {
-    let pools = use_v2_pools();
+pub fn PoolV3Swap() -> Element {
+    let pools = use_v3_pools();
 
     let tx_status = use_signal(|| "".to_string());
 
@@ -31,7 +31,7 @@ pub fn PoolV2Swap() -> Element {
 
         spawn_local(async move {
             calculating.set(true);
-            let new_amount = approx_amount_out(&amount_in.read(),&token_a.read(), &token_b.read(), &pools.pairs.read());
+            let new_amount = approx_amount_out(&amount_in.read(),&token_a.read(), &token_b.read(), &pools.pairs.read(), &pools.pool_state.read());
             log::debug!("New Amount out : {}", new_amount);
             amount_out.set(new_amount);
             calculating.set(false);
@@ -92,17 +92,20 @@ pub fn PoolV2Swap() -> Element {
                 is_loading.set(true);
 
                 if let Ok(amount_in) = parse_units(&amount_in(), a.decimals as u8) &&
-                    let Ok(amount_out) = parse_units(&amount_out(), b.decimals as u8)
+                    let Ok(amount_out) = parse_units(&amount_out(), b.decimals as u8) &&
+                    let Some(pool) = pools.pairs.iter().find(|p| (p.token0 == a.address && p.token1 == b.address) || (p.token0 == b.address && p.token1 == a.address))
+
                 {
                     let mul = U256::from(10_000) - U256::from(slippage_percent()*100.0);
                     let amount_out_min = amount_out.get_absolute() * mul / U256::from(10_000);
                     log::debug!("Amount out min: {}", amount_out_min);
                     tx_status.set("Swapping".to_string());
-                    match uniswap_v2_swap_tokens(
+                    match uniswap_v3_swap_tokens(
                         &a.address.clone(),
                         &b.address.clone(),
                         &amount_in.get_absolute().to_string(),
                         &amount_out_min.to_string(),
+                        &pool.fee.to_string(),
                         &(pools.router_address)(),
                     ).await {
                         Ok(jsval) => {
@@ -129,7 +132,7 @@ pub fn PoolV2Swap() -> Element {
     // UI rendering
     rsx! {
         div { class: "p-8 mt-12 glass w-full max-w-4xl flex flex-col gap-6 items-stretch flex-col-sm",
-              h2 { class: "text-3xl font-bold text-center mb-6", "V2 PoolSwap" }
+              h2 { class: "text-3xl font-bold text-center mb-6", "V3 PoolSwap" }
               if (pools.is_loading)() {
                   div { class: "text-gray-300", "Loading..." }
               }

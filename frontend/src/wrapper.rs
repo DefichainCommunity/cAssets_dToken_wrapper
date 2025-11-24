@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use alloy::primitives::{utils::{format_units, parse_units},U256};
-use crate::metamask::{TokenWrapperInfo, get_token_balance, get_all_wrappers, wrap_tokens, unwrap_tokens};
+use crate::metamask::{ get_token_balance, wrapper::{TokenWrapperInfo, get_all_wrappers, wrap_tokens, unwrap_tokens}};
 use crate::wallet_context::use_wallet;
 
 #[derive(Clone, Debug)]

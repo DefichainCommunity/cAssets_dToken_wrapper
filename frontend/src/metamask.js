@@ -4,6 +4,50 @@ import { ethers } from "https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js";
 // const provider;
 // let signer;
 
+const erc20Abi = [
+    "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)",
+    "function approve(address spender, uint256 amount) external returns (bool)",
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "function balanceOf(address) view returns (uint256)"
+];
+
+// Wrapper ABI
+const wrapperAbi = [
+    "function info() view returns (tuple(address dTokenAddress, address cAssetAddress, uint8 dTokenDecimals, uint8 cAssetDecimals, uint256 dTokenInFeeBps, uint256 dTokenOutFeeBps))"
+];
+// Wrapper Factory ABI
+const wrapperFactoryAbi = ["function getAllWraps() view returns (address[])"];
+// Wrapper Router ABI
+const wrapperRouterAbi = [
+    "function wrap(address dTokent, uint256 amount, address cAsset) external",
+    "function unwrap(address cAsset, uint256 amount, address dToken) external"
+];
+
+// Uniswap V2
+const uniswapV2RouterAbi = [
+    "function factory() view returns (address)",
+    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[])"
+];
+const uniswapV2FactoryAbi = [
+    "function allPairsLength() view returns (uint256)",
+    "function allPairs(uint256) view returns (address)"
+];
+const uniswapV2PairAbi = [
+    "function token0() view returns (address)",
+    "function token1() view returns (address)",
+    "function getReserves() view returns (uint112,uint112,uint32)"
+];
+
+// Uniswap V3
+const uniswapV3PairAbi = [ "function slot0() view returns (uint160 sqrtPriceX96, int24, uint16, uint16, uint16, uint8, bool)", "function liquidity() view returns (uint128)" ];
+
+const uniswapV3RouterAbi = [
+  // exactInputSingle params in struct form
+    //"function exactInputSingle((address,address,uint24,address,uint256,uint256,uint160)) external payable returns (uint256 amountOut)",
+    "function exactInput((bytes path,address recipient,uint256 amountIn,uint256 amountOutMinimum)) external payable returns (uint256 amountOut)"
+];
+
 /**
  * helper JSON stringify that converts BigInt to string
  */
@@ -59,13 +103,12 @@ export function js_on_accounts_changed(callback) {
 
 // ERC20
 export async function js_get_token_balance(user, token) {
-    const abi = ["function balanceOf(address) view returns (uint256)"];
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         let provider = new ethers.BrowserProvider(window.ethereum);
 
-        const erc20 = new ethers.Contract(token, abi, provider);
+        const erc20 = new ethers.Contract(token, erc20Abi, provider);
         const [bal, decimals] = await Promise.all([erc20.balanceOf(user), 18]);
         return {
             ok: true,
@@ -88,13 +131,7 @@ export async function js_get_all_wrappers(factoryAddress) {
         let provider = new ethers.BrowserProvider(window.ethereum);
 
         // Factory ABI
-        const factoryAbi = ["function getAllWraps() view returns (address[])"];
-        const factory = new ethers.Contract(factoryAddress, factoryAbi, provider);
-
-        // Wrapper ABI
-        const wrapperAbi = [
-            "function info() view returns (tuple(address dTokenAddress, address cAssetAddress, uint8 dTokenDecimals, uint8 cAssetDecimals, uint256 dTokenInFeeBps, uint256 dTokenOutFeeBps))"
-        ];
+        const factory = new ethers.Contract(factoryAddress, wrapperFactoryAbi, provider);
 
         const wrapAddresses = await factory.getAllWraps();
 
@@ -120,8 +157,6 @@ export async function js_get_all_wrappers(factoryAddress) {
             ...new Set(validWrappers.flatMap(w => [w.info.dTokenAddress, w.info.cAssetAddress]))
         ];
 
-        // 3. Fetch all token symbols in parallel
-        const erc20Abi = ["function symbol() view returns (string)"];
         const symbolMap = {};
         await Promise.all(uniqueTokens.map(async (addr) => {
             try {
@@ -146,7 +181,7 @@ export async function js_get_all_wrappers(factoryAddress) {
                 outBps: info.dTokenOutFeeBps
             }
         }));
-
+        console.log(safeStringify(tokenList));
         return { ok: true, value: safeStringify(tokenList) };
     } catch (err) {
         return { ok: false, value: err.reason || err.message || "Unknown error" };
@@ -161,17 +196,17 @@ export async function js_wrap_tokens(contractAddress, dToken, amount, cAsset) {
         let provider = new ethers.BrowserProvider(window.ethereum);
         let signer = await provider.getSigner();
 
-        const abi = ["function wrap(address dTokent, uint256 amount, address cAsset) external"];
-        const approveAbi = ["function approve(address spender, uint256 amount) external returns (bool)",
-                           "function decimals() view returns (uint8)"];
         console.log("contractAddress:", contractAddress, " dToken:",dToken, " Amount:",amount," cAsset:", cAsset);
-        const erc20_contract = new ethers.Contract(dToken, approveAbi, signer);
+        const erc20_contract = new ethers.Contract(dToken, erc20Abi, signer);
         const decimals = await erc20_contract.decimals();
         const amount_u256 = ethers.parseUnits(amount,decimals);
         const erc20_connected = erc20_contract.connect(signer);
-        const approve_tx = await erc20_connected.approve(contractAddress, amount_u256);
-        await approve_tx.wait();
-        const contract = new ethers.Contract(contractAddress, abi, signer);
+        const allowance = await erc20_connected.allowance(signer, contractAddress);
+        if (allowance < amount_u256){
+            const approve_tx = await erc20_connected.approve(contractAddress, amount_u256);
+            await approve_tx.wait();
+        }
+        const contract = new ethers.Contract(contractAddress, wrapperRouterAbi, signer);
         const connected = contract.connect(signer);
         const tx = await connected.wrap(dToken, amount_u256, cAsset);
         const receipt = await tx.wait();
@@ -196,17 +231,17 @@ export async function js_unwrap_tokens(contractAddress, cAsset, amount, dToken) 
         let provider = new ethers.BrowserProvider(window.ethereum);
         let signer = await provider.getSigner();
 
-        const abi = ["function unwrap(address cAsset, uint256 amount, address dToken) external"];
-        const approveAbi = ["function approve(address spender, uint256 amount) external returns (bool)",
-                           "function decimals() view returns (uint8)"];
         console.log("Unwrap on contractAddress:", contractAddress, " cAsset:", cAsset, " Amount:",amount, " dToken:",dToken);
-        const erc20_contract = new ethers.Contract(cAsset, approveAbi, signer);
+        const erc20_contract = new ethers.Contract(cAsset, erc20Abi, signer);
         const decimals = await erc20_contract.decimals();
         const amount_u256 = ethers.parseUnits(amount,decimals);
         const erc20_connected = erc20_contract.connect(signer);
-        const approve_tx = await erc20_connected.approve(contractAddress, amount_u256);
-        await approve_tx.wait();
-        const contract = new ethers.Contract(contractAddress, abi, signer);
+        const allowance = await erc20_connected.allowance(signer, contractAddress);
+        if (allowance < amount_u256){
+            const approve_tx = await erc20_connected.approve(contractAddress, amount_u256);
+            await approve_tx.wait();
+        }
+        const contract = new ethers.Contract(contractAddress, wrapperRouterAbi, signer);
         const connected = contract.connect(signer);
         const tx = await connected.unwrap(cAsset, amount_u256, dToken);
         const receipt = await tx.wait();
@@ -225,37 +260,15 @@ export async function js_unwrap_tokens(contractAddress, cAsset, amount, dToken) 
 
 
 //UniSwap
-const erc20abi = [
-    "function symbol() view returns (string)",
-    "function decimals() view returns (uint8)"
-];
-
 export async function js_get_uniswap_v2_pairs(routerAddr) {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         let provider = new ethers.BrowserProvider(window.ethereum);
-
-        // Minimal ABIs
-        const routerAbi = ["function factory() view returns (address)"];
-        const factoryAbi = [
-            "function allPairsLength() view returns (uint256)",
-            "function allPairs(uint256) view returns (address)"
-        ];
-        const pairAbi = [
-            "function token0() view returns (address)",
-            "function token1() view returns (address)",
-            "function getReserves() view returns (uint112,uint112,uint32)"
-        ];
-        const erc20Abi = [
-            "function symbol() view returns (string)",
-            "function decimals() view returns (uint8)"
-        ];
-
         // 1. Get factory address
-        const router = new ethers.Contract(routerAddr, routerAbi, provider);
+        const router = new ethers.Contract(routerAddr, uniswapV2RouterAbi, provider);
         const factoryAddr = await router.factory();
-        const factory = new ethers.Contract(factoryAddr, factoryAbi, provider);
+        const factory = new ethers.Contract(factoryAddr, uniswapV2FactoryAbi, provider);
 
         // 2. Get number of pairs
         const len = Number(await factory.allPairsLength());
@@ -269,7 +282,7 @@ export async function js_get_uniswap_v2_pairs(routerAddr) {
         const tokenPairs = await Promise.all(
             pairAddrs.map(async (pairAddr) => {
                 try {
-                    const pair = new ethers.Contract(pairAddr, pairAbi, provider);
+                    const pair = new ethers.Contract(pairAddr, uniswapV2PairAbi, provider);
                     const [token0, token1] = await Promise.all([pair.token0(), pair.token1()]);
 
                     let reserve0 = null, reserve1 = null;
@@ -324,27 +337,26 @@ export async function js_get_uniswap_v2_pairs(routerAddr) {
     }
 }
 
-export async function js_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, routerAddress) {
+export async function js_uniswap_v2_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, routerAddress) {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         let provider = new ethers.BrowserProvider(window.ethereum);
         let signer = await provider.getSigner();
 
-        const routerAbi = [
-            "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[])"
-        ];
-        const tokenAbi = [ "function approve(address spender, uint256 value) public returns (bool)", "function decimals() view returns (uint8)" ];
 
-        const router = new ethers.Contract(routerAddress, routerAbi, signer);
+        const router = new ethers.Contract(routerAddress, uniswapV2RouterAbi, signer);
 
-        const tokenInContract = new ethers.Contract(tokenIn, tokenAbi, signer);
+        const tokenInContract = new ethers.Contract(tokenIn, erc20Abi, signer);
         const decimals = await tokenInContract.decimals();
         const amount_in_u256 = amountIn;//thers.parseUnits(amountIn,decimals);
 
         // Approve
-        const approveTx = await tokenInContract.approve(routerAddress, amount_in_u256);
-        await approveTx.wait();
+        const allowance = await tokenInContract.allowance(signer, routerAddress);
+        if (allowance < amount_in_u256){
+            const approve_tx = await tokenInContract.approve(routerAddress, amount_in_u256);
+            await approve_tx.wait();
+        }
 
         const path = [tokenIn, tokenOut];
         const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
@@ -371,8 +383,6 @@ export async function js_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, 
 
 /// UniSwap V3
 export async function js_get_uniswap_v3_pool_states(poolAddrs) {
-    const poolAbi = [ "function slot0() view returns (uint160 sqrtPriceX96, int24, uint16, uint16, uint16, uint8, bool)", "function liquidity() view returns (uint128)" ];
-
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
@@ -381,7 +391,7 @@ export async function js_get_uniswap_v3_pool_states(poolAddrs) {
         // build all calls in parallel
         const results = await Promise.all(poolAddrs.map(async (poolAddr) => {
             try {
-                const pool = new ethers.Contract(poolAddr, poolAbi, provider);
+                const pool = new ethers.Contract(poolAddr, uniswapV3PairAbi, provider);
 
                 // parallel call slot0 + liquidity
                 const [slot0, liquidity] = await Promise.all([pool.slot0(), pool.liquidity()]);
@@ -404,6 +414,57 @@ export async function js_get_uniswap_v3_pool_states(poolAddrs) {
 
         return { ok: true, value: safeStringify(map) };
 
+    } catch (err) {
+        console.error(err);
+        return { ok: false, value: err?.reason || err?.message || String(err) };
+    }
+}
+
+function encodePath(tokenIn, fee, tokenOut) {
+    return ethers.concat([
+        ethers.getAddress(tokenIn),
+        ethers.toBeHex(fee, 3),
+        ethers.getAddress(tokenOut)
+    ]);
+}
+
+export async function js_uniswap_v3_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, fee, routerAddress) {
+    try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+        let signer = await provider.getSigner();
+
+
+        const router = new ethers.Contract(routerAddress, uniswapV3RouterAbi, signer);
+
+        const tokenInContract = new ethers.Contract(tokenIn, erc20Abi, signer);
+        const decimals = await tokenInContract.decimals();
+        const amount_in_u256 = amountIn;//thers.parseUnits(amountIn,decimals);
+
+        // Approve
+        const allowance = await tokenInContract.allowance(signer, routerAddress);
+        if (allowance < amount_in_u256){
+            const approve_tx = await tokenInContract.approve(routerAddress, amount_in_u256);
+            await approve_tx.wait();
+        }
+
+        const path = encodePath(tokenIn,fee,tokenOut);
+        console.log("Path len ",path.length);
+        const recipient = await signer.getAddress();
+        const params = {
+            path:path,
+            recipient:recipient,
+            amountIn:amount_in_u256,
+            amountOutMinimum: amountOutMin
+        };
+        const tx = await router.exactInput(params,{value: 0n});
+        const receipt = await tx.wait();
+
+        return {
+            ok: true,
+            value: JSON.stringify(`${receipt.hash}`)
+        };
     } catch (err) {
         console.error(err);
         return { ok: false, value: err?.reason || err?.message || String(err) };
