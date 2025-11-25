@@ -4,20 +4,7 @@ use alloy::primitives::{utils::parse_units,U256};
 use crate::components::switch::{Switch, SwitchThumb};
 use crate::metamask::uniswap_v2::{V2PairInfo, get_uniswap_v2_pairs};
 use crate::wallet_context::use_wallet;
-use super::v2::use_v2_pools;
-
-fn is_zero_or_empty(v: &Option<String>) -> bool {
-    match v.as_deref() {
-        None => true,
-        Some("") => true,
-        Some("0") => true,
-        Some("0.0") => true,
-        Some(s) => {
-            // also handle cases like "0.0000"
-            s.trim().parse::<f64>().map(|n| n == 0.0).unwrap_or(false)
-        }
-    }
-}
+use super::v2::{use_v2_pools, is_zero_or_empty};
 
 #[component]
 pub fn PoolV2Pairs() -> Element {
