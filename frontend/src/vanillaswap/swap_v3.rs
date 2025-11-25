@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use alloy::primitives::{utils::parse_units,U256};
+use crate::components::switch::{Switch, SwitchThumb};
 use crate::metamask::{
     get_token_balance,
     uniswap_v3::uniswap_v3_swap_tokens
@@ -13,6 +14,7 @@ use super::v3::{approx_amount_out, unique_pool_tokens, use_v3_pools};
 pub fn PoolV3Swap() -> Element {
     let pools = use_v3_pools();
 
+    let mut show_zero_liq = use_signal(|| false);
     let tx_status = use_signal(|| "".to_string());
 
     let mut token_a = use_signal(|| None as Option<TokenInfo>);
@@ -125,14 +127,23 @@ pub fn PoolV3Swap() -> Element {
         }
     };
 
-    let from_options = unique_pool_tokens(&None, &pools.pairs.read());
-    let to_options = unique_pool_tokens(&token_a.read(), &pools.pairs.read());
+    let from_options = unique_pool_tokens(&None, &pools.pairs.read(), &pools.pool_state.read(), &show_zero_liq.read());
+    let to_options = unique_pool_tokens(&token_a.read(), &pools.pairs.read(), &pools.pool_state.read(), &show_zero_liq.read());
     let from_selected = token_a.read().as_ref().map(|t| t.address.clone()).unwrap_or_default();
     let to_selected = token_b.read().as_ref().map(|t| t.address.clone()).unwrap_or_default();
     // UI rendering
     rsx! {
         div { class: "p-8 mt-12 glass w-full max-w-4xl flex flex-col gap-6 items-stretch flex-col-sm",
               h2 { class: "text-3xl font-bold text-center mb-6", "V3 PoolSwap" }
+              div { class: "flex items-center gap-2",
+                    span { class: "text-gray-200 text-sm", "Show zero liquidity pools" }
+                    Switch {
+                        checked: show_zero_liq(),
+                        on_checked_change: move |new_state| show_zero_liq.set(new_state),
+                        SwitchThumb {}
+                    }
+              }
+
               if (pools.is_loading)() {
                   div { class: "text-gray-300", "Loading..." }
               }

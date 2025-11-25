@@ -50,10 +50,23 @@ pub fn use_sync_v2_pools() {
     });
 }
 
+pub fn is_zero_or_empty(v: &Option<String>) -> bool {
+    match v.as_deref() {
+        None => true,
+        Some("") => true,
+        Some("0") => true,
+        Some("0.0") => true,
+        Some(s) => {
+            // also handle cases like "0.0000"
+            s.trim().parse::<f64>().map(|n| n == 0.0).unwrap_or(false)
+        }
+    }
+}
 
 pub fn unique_pool_tokens(
     selected_a: &Option<TokenInfo>,
     pairs: &Vec<V2PairInfo>,
+    zero_liquid: &bool,
 ) -> Vec<TokenInfo> {
     let address = if let Some(a) = selected_a{
          a.address.clone()
@@ -64,31 +77,33 @@ pub fn unique_pool_tokens(
     let mut out = vec![];
 
     for p in pairs {
-        // Check if Token A is token0
-        if p.token0 == address || address.is_empty() {
-            let token_b = TokenInfo {
-                symbol: p.symbol1.clone().unwrap_or("???".into()),
-                address: p.token1.clone(),
-                decimals: p.decimals1.unwrap_or(18),
-                token_type: TokenType::CAsset,
+        if *zero_liquid || (!is_zero_or_empty(&p.reserve0) && !is_zero_or_empty(&p.reserve1)){
+            // Check if Token A is token0
+            if p.token0 == address || address.is_empty() {
+                let token_b = TokenInfo {
+                    symbol: p.symbol1.clone().unwrap_or("???".into()),
+                    address: p.token1.clone(),
+                    decimals: p.decimals1.unwrap_or(18),
+                    token_type: TokenType::CAsset,
 
-            };
-            if seen.insert(token_b.address.clone()) {
-                out.push(token_b);
+                };
+                if seen.insert(token_b.address.clone()) {
+                    out.push(token_b);
+                }
             }
-        }
 
-        // Check if Token A is token1
-        if p.token1 == address || address.is_empty(){
-            let token_b = TokenInfo {
-                symbol: p.symbol0.clone().unwrap_or("???".into()),
-                address: p.token0.clone(),
-                decimals: p.decimals0.unwrap_or(18),
-                token_type: TokenType::CAsset,
+            // Check if Token A is token1
+            if p.token1 == address || address.is_empty(){
+                let token_b = TokenInfo {
+                    symbol: p.symbol0.clone().unwrap_or("???".into()),
+                    address: p.token0.clone(),
+                    decimals: p.decimals0.unwrap_or(18),
+                    token_type: TokenType::CAsset,
 
-            };
-            if seen.insert(token_b.address.clone()) {
-                out.push(token_b);
+                };
+                if seen.insert(token_b.address.clone()) {
+                    out.push(token_b);
+                }
             }
         }
     }
