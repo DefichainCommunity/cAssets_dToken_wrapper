@@ -6,12 +6,13 @@ use crate::metamask::{
     get_token_balance,
     uniswap_v2::uniswap_v2_swap_tokens
 };
-use crate::wrapper::TokenInfo;
+use crate::wrapper::{TokenInfo, TokenType};
 use crate::wallet_context::use_wallet;
 use super::v2::{approx_amount_out, unique_pool_tokens, use_v2_pools};
 
 #[component]
 pub fn PoolV2Swap() -> Element {
+    let wallet = use_wallet();
     let pools = use_v2_pools();
 
     let mut show_zero_liq = use_signal(|| false);
@@ -33,7 +34,6 @@ pub fn PoolV2Swap() -> Element {
         spawn_local(async move {
             calculating.set(true);
             let new_amount = approx_amount_out(&amount_in.read(),&token_a.read(), &token_b.read(), &pools.pairs.read());
-            log::debug!("New Amount out : {}", new_amount);
             amount_out.set(new_amount);
             calculating.set(false);
         });
@@ -47,7 +47,7 @@ pub fn PoolV2Swap() -> Element {
 
         spawn_local(async move {
             if let Some(from_sel) = from_sel
-                && let Ok(bal) = get_token_balance(&(wallet.info)().address, &from_sel.address).await {
+                && let Ok(bal) = get_token_balance(&(wallet.info)().address, &from_sel.address, matches!(from_sel.token_type, TokenType::Native)).await {
                     log::debug!("GetTokenBalance of address {} for token address {} :{:?}",(wallet.info)().address, from_sel.address, bal);
                     balance.set(bal);
                 }
@@ -105,6 +105,8 @@ pub fn PoolV2Swap() -> Element {
                         &amount_in.get_absolute().to_string(),
                         &amount_out_min.to_string(),
                         &(pools.router_address)(),
+                        matches!(a.token_type, TokenType::Native),
+                        matches!(b.token_type, TokenType::Native),
                     ).await {
                         Ok(jsval) => {
                             log::info!("swap ok: {}", jsval);
@@ -123,10 +125,10 @@ pub fn PoolV2Swap() -> Element {
         }
     };
 
-    let from_options = unique_pool_tokens(&None, &pools.pairs.read(), &show_zero_liq.read());
-    let to_options = unique_pool_tokens(&token_a.read(), &pools.pairs.read(), &show_zero_liq.read());
-    let from_selected = token_a.read().as_ref().map(|t| t.address.clone()).unwrap_or_default();
-    let to_selected = token_b.read().as_ref().map(|t| t.address.clone()).unwrap_or_default();
+    let from_options = unique_pool_tokens(&None, &pools.pairs.read(), &show_zero_liq.read(), (wallet.info)().chain_id);
+    let to_options = unique_pool_tokens(&token_a.read(), &pools.pairs.read(), &show_zero_liq.read(), (wallet.info)().chain_id);
+    let from_selected = token_a.read().as_ref().map(|t| serde_json::to_string(&t).unwrap()).unwrap_or_default();
+    let to_selected = token_b.read().as_ref().map(|t| serde_json::to_string(&t).unwrap()).unwrap_or_default();
     // UI rendering
     rsx! {
         div { class: "p-8 mt-12 glass w-full max-w-4xl flex flex-col gap-6 items-stretch flex-col-sm",
@@ -156,16 +158,17 @@ pub fn PoolV2Swap() -> Element {
                               class: "flex-1 bg-transparent text-white text-xl font-semibold focus:outline-none",
                               value: "{from_selected}",
                               onchange: move |e| {
-                                  log::debug!("Value {}",  e.value());
-                                  if let Some(tok) = from_options.iter().find(|t| t.address == e.value()) {
-                                      token_a.set(Some(tok.clone()));
-                                      // Reset token B, because A changed
-                                      token_b.set(None);
+                                  if let Ok(sel) = serde_json::from_str::<TokenInfo>(&e.value()) {
+                                      if let Some(tok) = from_options.iter().find(|t| **t == sel) {
+                                          token_a.set(Some(tok.clone()));
+                                          // Reset token B, because A changed
+                                          token_b.set(None);
+                                      }
                                   }
                               },
                               option { value: "", "Select token A" }
                               { from_options.iter().map(|t| rsx!(
-                                  option { value: "{t.address}", "{t.symbol}" }
+                                  option { value: "{serde_json::to_string(&t).unwrap()}", "{t.symbol}" }
                               )) }
                           }
                     }
@@ -204,14 +207,15 @@ pub fn PoolV2Swap() -> Element {
                               class: "flex-1 bg-transparent text-white text-xl font-semibold focus:outline-none",
                               value: "{to_selected}",
                               onchange: move |e| {
-                                  let sym = e.value();
-                                  if let Some(tok) = to_options.iter().find(|t| t.address == e.value()) {
-                                      token_b.set(Some(tok.clone()));
+                                  if let Ok(sel) = serde_json::from_str::<TokenInfo>(&e.value()) {
+                                      if let Some(tok) = to_options.iter().find(|t| **t == sel) {
+                                          token_b.set(Some(tok.clone()));
+                                      }
                                   }
                               },
                               option { value: "", "Select token B" }
                               { to_options.iter().map(|t| rsx!(
-                                  option { value: "{t.address}", "{t.symbol}" }
+                                  option { value: "{serde_json::to_string(&t).unwrap()}", "{t.symbol}" }
                               )) }
                           }
                     }

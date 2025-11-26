@@ -1,9 +1,12 @@
 use dioxus::prelude::*;
 use std::ops::{Add, Div, Mul, Sub};
 use alloy::primitives::{utils::{format_units, parse_units},U256};
-use crate::metamask::uniswap_v2::{V2PairInfo, get_uniswap_v2_pairs};
-use crate::wallet_context::use_wallet;
-use crate::wrapper::{TokenInfo, TokenType};
+use crate::{
+    config::{get_config_entry, ConfigEntry},
+    metamask::uniswap_v2::{get_uniswap_v2_pairs, V2PairInfo},
+    wallet_context::use_wallet,
+    wrapper::{TokenInfo, TokenType},
+};
 
 #[derive(Clone)]
 pub struct UniswapV2PoolContext {
@@ -27,14 +30,7 @@ pub fn use_sync_v2_pools() {
         spawn(async move {
             log::debug!("Sync v2 pools at chain id: {}",   info.chain_id);
             pools.pairs.set(vec![]);
-            if info.chain_id == 1130{ // MainNet
-                pools.router_address.set("0x3E8C92491fc73390166BA00725B8F5BD734B8fba".to_string());
-            }else if  info.chain_id == 1131{ // TestNet
-                pools.router_address.set("0x79208eADd9FbC29116108433a38Af62D0fD83850".to_string());
-            }else{
-                pools.router_address.set("".to_string());
-            }
-
+            pools.router_address.set(get_config_entry(info.chain_id, &ConfigEntry::VanillaV2Router).to_string());
             if !info.address.is_empty() && !pools.router_address.is_empty() {
                 pools.is_loading.set(true);
                 log::debug!("Router address {}", pools.router_address);
@@ -67,6 +63,7 @@ pub fn unique_pool_tokens(
     selected_a: &Option<TokenInfo>,
     pairs: &Vec<V2PairInfo>,
     zero_liquid: &bool,
+    chain_id : u32,
 ) -> Vec<TokenInfo> {
     let address = if let Some(a) = selected_a{
          a.address.clone()
@@ -75,6 +72,9 @@ pub fn unique_pool_tokens(
     };
     let mut seen = std::collections::HashSet::new();
     let mut out = vec![];
+
+    let native_symbol = get_config_entry(chain_id, &ConfigEntry::Native).to_string();
+    let wrapped_native_address = get_config_entry(chain_id, &ConfigEntry::WrappedNativeAddress).to_string();
 
     for p in pairs {
         if *zero_liquid || (!is_zero_or_empty(&p.reserve0) && !is_zero_or_empty(&p.reserve1)){
@@ -88,7 +88,17 @@ pub fn unique_pool_tokens(
 
                 };
                 if seen.insert(token_b.address.clone()) {
+                    if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
+                        let native = TokenInfo {
+                            symbol: native_symbol.to_string(),
+                            address: token_b.address.clone(),
+                            decimals: token_b.decimals,
+                            token_type: TokenType::Native,
+                        };
+                        out.push(native);
+                    }
                     out.push(token_b);
+
                 }
             }
 
@@ -102,6 +112,15 @@ pub fn unique_pool_tokens(
 
                 };
                 if seen.insert(token_b.address.clone()) {
+                    if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
+                        let native = TokenInfo {
+                            symbol: native_symbol.to_string(),
+                            address: token_b.address.clone(),
+                            decimals: token_b.decimals,
+                            token_type: TokenType::Native,
+                        };
+                        out.push(native);
+                    }
                     out.push(token_b);
                 }
             }
