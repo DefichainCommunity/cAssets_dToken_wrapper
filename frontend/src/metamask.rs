@@ -15,7 +15,7 @@ extern "C" {
     async fn js_connect_metamask() -> JsValue;
     pub fn js_on_chain_changed(callback: &Closure<dyn FnMut(u32)>);
     pub fn js_on_accounts_changed(callback: &Closure<dyn FnMut(Vec<JsValue>)>);
-    async fn js_get_token_balance(user: &str, token: &str) -> JsValue;
+    async fn js_get_token_balance(user: &str, token: &str, is_native: bool) -> JsValue;
 }
 
 pub fn js_parse<T: DeserializeOwned>(js: JsValue) -> Result<T, String> {
@@ -53,6 +53,6 @@ pub async fn connect_metamask()  -> Result<MetamaskInfo, Box<dyn Error>>{
         js_try!(js_connect_metamask() => MetamaskInfo)
 }
 
-pub async fn get_token_balance(user: &str, token: &str) -> Result<String,Box<dyn Error>>{
-    js_try!(js_get_token_balance(user, token) => String)
+pub async fn get_token_balance(user: &str, token: &str, is_native: bool) -> Result<String,Box<dyn Error>>{
+    js_try!(js_get_token_balance(user, token, is_native) => String)
 }

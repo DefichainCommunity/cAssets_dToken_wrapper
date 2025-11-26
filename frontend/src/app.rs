@@ -139,9 +139,9 @@ pub fn App() -> Element {
 
             // ---- FIXED TOP BAR ----
             div {
-                class: "fixed top-0 left-0 w-full flex items-center justify-between
-                    px-8 py-4 backdrop-blur-sm bg-black/20 z-50",
-
+                // class: "fixed top-0 left-0 w-full flex items-center justify-between
+                //     px-8 py-4 backdrop-blur-sm bg-black/20 z-50",
+                class: "w-full flex flex-wrap items-center justify-between gap-2 p-4",
                 div { class: "relative",
                       h1 {
                           class: "text-xl font-bold tracking-wide text-defichain",
@@ -159,7 +159,7 @@ pub fn App() -> Element {
                 }
 
                 // Tabs
-                div { class: "flex space-x-4 mt-6",
+                div { class: "flex flex-wrap flex-grow justify-center gap-2 mt-6",
                       button {
                           class: button_class(Tab::Wrap, active_tab()),
                           onclick: move |_| active_tab.set(Tab::Wrap),

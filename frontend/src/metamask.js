@@ -27,7 +27,9 @@ const wrapperRouterAbi = [
 // Uniswap V2
 const uniswapV2RouterAbi = [
     "function factory() view returns (address)",
-    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[])"
+    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[])",
+    "function swapExactTokensForETHSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)",
+    "function swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) payable"
 ];
 const uniswapV2FactoryAbi = [
     "function allPairsLength() view returns (uint256)",
@@ -43,9 +45,11 @@ const uniswapV2PairAbi = [
 const uniswapV3PairAbi = [ "function slot0() view returns (uint160 sqrtPriceX96, int24, uint16, uint16, uint16, uint8, bool)", "function liquidity() view returns (uint128)" ];
 
 const uniswapV3RouterAbi = [
-  // exactInputSingle params in struct form
-    //"function exactInputSingle((address,address,uint24,address,uint256,uint256,uint160)) external payable returns (uint256 amountOut)",
     "function exactInput((bytes path,address recipient,uint256 amountIn,uint256 amountOutMinimum)) external payable returns (uint256 amountOut)"
+];
+const wethAbi = [
+  "function withdraw(uint256 wad) external",
+  "function balanceOf(address owner) view returns (uint256)"
 ];
 
 /**
@@ -102,14 +106,20 @@ export function js_on_accounts_changed(callback) {
 }
 
 // ERC20
-export async function js_get_token_balance(user, token) {
+export async function js_get_token_balance(user, token, isNative) {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         let provider = new ethers.BrowserProvider(window.ethereum);
 
-        const erc20 = new ethers.Contract(token, erc20Abi, provider);
-        const [bal, decimals] = await Promise.all([erc20.balanceOf(user), 18]);
+        let bal, decimals;
+
+        if (isNative) {
+            [bal, decimals] = await Promise.all([provider.getBalance(user), 18]);
+        }else{
+            const erc20 = new ethers.Contract(token, erc20Abi, provider);
+            [bal, decimals] = await Promise.all([erc20.balanceOf(user), erc20.decimals()]);
+        }
         return {
             ok: true,
             value: JSON.stringify(ethers.formatUnits(bal, decimals))
@@ -337,37 +347,61 @@ export async function js_get_uniswap_v2_pairs(routerAddr) {
     }
 }
 
-export async function js_uniswap_v2_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, routerAddress) {
+export async function js_uniswap_v2_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, routerAddress, isNativeIn, isNativeOut) {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         let provider = new ethers.BrowserProvider(window.ethereum);
         let signer = await provider.getSigner();
 
-
         const router = new ethers.Contract(routerAddress, uniswapV2RouterAbi, signer);
 
         const tokenInContract = new ethers.Contract(tokenIn, erc20Abi, signer);
         const decimals = await tokenInContract.decimals();
-        const amount_in_u256 = amountIn;//thers.parseUnits(amountIn,decimals);
-
-        // Approve
-        const allowance = await tokenInContract.allowance(signer, routerAddress);
-        if (allowance < amount_in_u256){
-            const approve_tx = await tokenInContract.approve(routerAddress, amount_in_u256);
-            await approve_tx.wait();
-        }
+        const amount_in_u256 = amountIn;
 
         const path = [tokenIn, tokenOut];
         const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
 
-        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-            amountIn,
-            amountOutMin,
-            path,
-            await signer.getAddress(),
-            deadline,
-        );
+        let tx;
+        if (isNativeIn){
+            tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(
+                amountOutMin,
+                path,
+                await signer.getAddress(),
+                deadline,
+                {
+                    value: amountIn
+                }
+            );
+        }else{
+            // Approve
+            const allowance = await tokenInContract.allowance(signer, routerAddress);
+            if (allowance < amount_in_u256){
+                const approve_tx = await tokenInContract.approve(routerAddress, amount_in_u256);
+                await approve_tx.wait();
+            }
+
+
+            if (isNativeOut){
+                tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+                    amountIn,
+                    amountOutMin,
+                    path,
+                    await signer.getAddress(),
+                    deadline,
+                );
+            }else{
+                tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                    amountIn,
+                    amountOutMin,
+                    path,
+                    await signer.getAddress(),
+                    deadline,
+                );
+            }
+
+        }
         const receipt = await tx.wait();
 
         return {
@@ -428,7 +462,7 @@ function encodePath(tokenIn, fee, tokenOut) {
     ]);
 }
 
-export async function js_uniswap_v3_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, fee, routerAddress) {
+export async function js_uniswap_v3_swap_tokens(tokenIn, tokenOut, amountIn, amountOutMin, fee, routerAddress, isNativeIn, isNativeOut) {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
         await window.ethereum.request({ method: 'eth_requestAccounts' });
@@ -450,7 +484,6 @@ export async function js_uniswap_v3_swap_tokens(tokenIn, tokenOut, amountIn, amo
         }
 
         const path = encodePath(tokenIn,fee,tokenOut);
-        console.log("Path len ",path.length);
         const recipient = await signer.getAddress();
         const params = {
             path:path,
@@ -458,9 +491,16 @@ export async function js_uniswap_v3_swap_tokens(tokenIn, tokenOut, amountIn, amo
             amountIn:amount_in_u256,
             amountOutMinimum: amountOutMin
         };
-        const tx = await router.exactInput(params,{value: 0n});
+        const tx = await router.exactInput(params,isNativeIn ? { value: amountIn } : {});
         const receipt = await tx.wait();
-
+        if (isNativeOut) {
+            const wethContract = new ethers.Contract(tokenOut, wethAbi, signer);
+            const balance = await wethContract.balanceOf(recipient);
+            if (balance > 0n) {
+                const unwrapTx = await wethContract.withdraw(balance);
+                await unwrapTx.wait();
+            }
+        }
         return {
             ok: true,
             value: JSON.stringify(`${receipt.hash}`)

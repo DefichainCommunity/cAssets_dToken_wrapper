@@ -2,9 +2,12 @@ use std::collections::BTreeMap;
 use alloy::primitives::{utils::{format_units, parse_units},U256};
 use dioxus::prelude::*;
 use serde::Deserialize;
-use crate::wallet_context::use_wallet;
-use crate::wrapper::{TokenInfo, TokenType};
-use crate::metamask::uniswap_v3::{V3PoolState, get_uniswap_v3_pool_states};
+use crate::{
+    config::{get_config_entry, ConfigEntry},
+    metamask::uniswap_v3::{V3PoolState, get_uniswap_v3_pool_states},
+    wallet_context::use_wallet,
+    wrapper::{TokenInfo, TokenType},
+};
 
 
 #[derive(Clone)]
@@ -31,17 +34,7 @@ pub fn use_sync_v3_pools() {
             log::debug!("Sync v3 pools at chain id: {}",   info.chain_id);
             // Always refresh the list of pools for this chain
             pools.pairs.set(load_pools(info.chain_id));
-            if info.chain_id == 1130{ // MainNet
-                // pools.router_address.set("0x3E8C92491fc73390166BA00725B8F5BD734B8fba".to_string());
-                pools.router_address.set("0x2A9c4EdE9994911359af815367187947eD1dDf02".to_string());
-
-            }else if  info.chain_id == 1131{ // TestNet
-                // v3 not available on testnet
-                pools.router_address.set("".to_string());
-            }else{
-                pools.router_address.set("".to_string());
-            }
-
+            pools.router_address.set(get_config_entry(info.chain_id, &ConfigEntry::VanillaV3Router).to_string());
             // Only fetch pool state if connected
             if !info.address.is_empty() && !pools.router_address.is_empty(){
                 pools.is_loading.set(true);
@@ -66,6 +59,9 @@ pub fn use_sync_v3_pools() {
 pub fn unique_pool_tokens(
     selected_a: &Option<TokenInfo>,
     pairs: &Vec<V3PoolInfo>,
+    state: &BTreeMap<String, V3PoolState>,
+    zero_liquid: &bool,
+    chain_id : u32,
 ) -> Vec<TokenInfo> {
     let address = if let Some(a) = selected_a{
          a.address.clone()
@@ -75,32 +71,56 @@ pub fn unique_pool_tokens(
     let mut seen = std::collections::HashSet::new();
     let mut out = vec![];
 
+    let native_symbol = get_config_entry(chain_id, &ConfigEntry::Native).to_string();
+    let wrapped_native_address = get_config_entry(chain_id, &ConfigEntry::WrappedNativeAddress).to_string();
     for p in pairs {
-        // Check if Token A is token0
-        if p.token0 == address || address.is_empty() {
-            let token_b = TokenInfo {
-                symbol: p.symbol1.clone(),
-                address: p.token1.clone(),
-                decimals: p.decimals1,
-                token_type: TokenType::CAsset,
+        if let Some(state) = state.get(&p.pair_address){
+            if *zero_liquid || state.liquidity > 0_u128{
+                // Check if Token A is token0
+                if p.token0 == address || address.is_empty() {
+                    let token_b = TokenInfo {
+                        symbol: p.symbol1.clone(),
+                        address: p.token1.clone(),
+                        decimals: p.decimals1,
+                        token_type: TokenType::CAsset,
 
-            };
-            if seen.insert(token_b.address.clone()) {
-                out.push(token_b);
-            }
-        }
+                    };
+                    if seen.insert(token_b.address.clone()) {
+                        if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
+                            let native = TokenInfo {
+                                symbol: native_symbol.to_string(),
+                                address: token_b.address.clone(),
+                                decimals: token_b.decimals,
+                                token_type: TokenType::Native,
+                            };
+                            out.push(native);
+                        }
+                        out.push(token_b);
+                    }
+                }
 
-        // Check if Token A is token1
-        if p.token1 == address || address.is_empty(){
-            let token_b = TokenInfo {
-                symbol: p.symbol0.clone(),
-                address: p.token0.clone(),
-                decimals: p.decimals0,
-                token_type: TokenType::CAsset,
+                // Check if Token A is token1
+                if p.token1 == address || address.is_empty(){
+                    let token_b = TokenInfo {
+                        symbol: p.symbol0.clone(),
+                        address: p.token0.clone(),
+                        decimals: p.decimals0,
+                        token_type: TokenType::CAsset,
 
-            };
-            if seen.insert(token_b.address.clone()) {
-                out.push(token_b);
+                    };
+                    if seen.insert(token_b.address.clone()) {
+                        if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
+                            let native = TokenInfo {
+                                symbol: native_symbol.to_string(),
+                                address: token_b.address.clone(),
+                                decimals: token_b.decimals,
+                                token_type: TokenType::Native,
+                            };
+                            out.push(native);
+                        }
+                        out.push(token_b);
+                    }
+                }
             }
         }
     }

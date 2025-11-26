@@ -13,7 +13,7 @@ extern "C" {
     //uniswap v3
     async fn js_get_uniswap_v3_pool_states(pools: Vec<JsValue>) -> JsValue;
     async fn js_uniswap_v3_swap_tokens(token_in: &str, token_out: &str, amount_in: &str,
-                            amount_out_min: &str, fee: &str, router_address: &str) -> JsValue;
+                            amount_out_min: &str, fee: &str, router_address: &str, is_native_in: bool, is_native_out: bool) -> JsValue;
 }
 
 
@@ -40,6 +40,8 @@ pub async fn uniswap_v3_swap_tokens(
     amount_out_min: &str,
     fee: &str,
     router_address: &str,
+    is_native_in: bool,
+    is_native_out: bool,
 ) -> Result<String, String> {
-    js_try!(js_uniswap_v3_swap_tokens(token_in,token_out,amount_in,amount_out_min,fee,router_address) => String)
+    js_try!(js_uniswap_v3_swap_tokens(token_in,token_out,amount_in,amount_out_min,fee,router_address, is_native_in, is_native_out) => String)
 }
