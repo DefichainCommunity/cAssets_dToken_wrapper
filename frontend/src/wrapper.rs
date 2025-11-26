@@ -1,10 +1,18 @@
 use dioxus::prelude::*;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen_futures::spawn_local;
 use alloy::primitives::{utils::{format_units, parse_units},U256};
-use crate::metamask::{ get_token_balance, wrapper::{TokenWrapperInfo, get_all_wrappers, wrap_tokens, unwrap_tokens}};
-use crate::wallet_context::use_wallet;
+use crate::{
+    config::{get_config_entry, ConfigEntry},
+    metamask::{
+        get_token_balance,
+        wrapper::{TokenWrapperInfo, get_all_wrappers, wrap_tokens, unwrap_tokens}
+    },
+    wallet_context::use_wallet,
+};
 
-#[derive(Clone, Debug)]
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TokenInfo {
     pub symbol: String,
     pub address: String,
@@ -12,8 +20,9 @@ pub struct TokenInfo {
     pub token_type : TokenType,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum TokenType{
+    Native,
     DToken,
     CAsset,
 }
@@ -84,16 +93,8 @@ pub fn Wrapper() -> Element {
             balance.set("0.0".to_string());
             to_selected.set(None);
             from_selected.set(None);
-            if info.chain_id == 1030{
-                factory_address.set("".to_string());
-                router_address.set("".to_string());
-            }else if  info.chain_id == 1131{
-                factory_address.set("0xE521e9e0d066e7ba3702833E7B535Be6DE2fa41b".to_string());
-                router_address.set("0x7081cbaDb76F0df8eeB9889EFC821aFE6a451622".to_string());
-            }else{
-                factory_address.set("".to_string());
-                router_address.set("".to_string());
-            }
+            factory_address.set(get_config_entry(info.chain_id, &ConfigEntry::CAssetDTokenWrapFactory).to_string());
+            router_address.set(get_config_entry(info.chain_id, &ConfigEntry::CAssetDTokenWrapRouter).to_string());
             if !info.address.is_empty() && !router_address.is_empty() {
                 match get_all_wrappers(&factory_address()).await {
                     Ok(list) => {
@@ -101,7 +102,7 @@ pub fn Wrapper() -> Element {
                             let (from,to) = update_pair(&first.d_token_address, &list);
                             to_selected.set(to);
                             from_selected.set(from);
-                            if let Ok(bal) = get_token_balance(&info.address, &first.d_token_address).await {
+                            if let Ok(bal) = get_token_balance(&info.address, &first.d_token_address, false).await {
                                 log::debug!("GetTokenBalance of address {} for token address {} :{:?}",info.address, first.d_token_address, bal);
                                 balance.set(bal);
                             }
@@ -124,7 +125,7 @@ pub fn Wrapper() -> Element {
         spawn_local(async move {
             let info = (wallet.info)().clone();
             if let Some(from_sel) = from_sel
-                && let Ok(bal) = get_token_balance(&info.address, &from_sel.address).await {
+                && let Ok(bal) = get_token_balance(&info.address, &from_sel.address, false).await {
                     log::debug!("GetTokenBalance of address {} for token address {} :{:?}",info.address, from_sel.address, bal);
                     balance.set(bal);
                 }
@@ -171,7 +172,7 @@ pub fn Wrapper() -> Element {
     let accent_for = |kind: &Option<TokenInfo>| -> String {
         if let Some(token) = kind {
             match token.token_type {
-                TokenType::DToken => "token-badge-defi ".to_string(),
+                TokenType::DToken | TokenType::Native => "token-badge-defi ".to_string(),
                 TokenType::CAsset => "token-badge-cfr ".to_string(),
             }
         } else {
@@ -287,7 +288,7 @@ pub fn Wrapper() -> Element {
                                             unwrap_tokens(&router_address(), &from_selected.address.to_string(), &amount.read(), &to_selected.address.to_string()).await
                                         };
                                         tx_status.set(format!("{:?}", res));
-                                        if let Ok(bal) = get_token_balance(&(wallet.info)().address, &from_selected.address.to_string()).await {
+                                        if let Ok(bal) = get_token_balance(&(wallet.info)().address, &from_selected.address.to_string(), false).await {
                                             log::debug!("TokenBalance {:?}",bal);
                                             balance.set(bal);
                                         }
