@@ -178,11 +178,13 @@ pub fn PoolV2Swap() -> Element {
                           button { class: "px-3 py-1 bg-white/10 rounded-lg text-white", onclick: on_max_click, "Max" }
                     }
 
-                    input {
-                        class: "mt-4 w-full bg-transparent text-right text-2xl text-white focus:outline-none",
-                        placeholder: "Amount",
-                        value: "{amount_in.read()}",
-                        oninput: move |e| amount_in.set(e.value().to_string())
+                    div { class: "mt-2 flex justify-end ",
+                          input {
+                              class: "mt-4 w-1/3 bg-white/10 text-right text-2xl text-white rounded-lg px-2",
+                              placeholder: "Amount",
+                              value: "{amount_in.read()}",
+                              oninput: move |e| amount_in.set(e.value().to_string())
+                          }
                     }
               }
 
@@ -220,15 +222,17 @@ pub fn PoolV2Swap() -> Element {
                           }
                     }
                     div { class: "mt-4 text-2xl text-right text-gray-200", "out≈ {amount_out()}" }
-                    div { class: "mt-4 text-2xl text-right text-gray-200",
+                    div { class: "mt-4 text-right text-gray-200",
+                          div { class: "mt-2 flex justify-end ",
                           input {
-                              class: "mt-4 w-full bg-transparent text-right text-2xl text-white focus:outline-none",
+                              class: "mt-4 w-1/4 bg-white/10 text-right text-2xl text-white rounded-lg px-2",
                               value: "{slippage_percent.read()}",
                               oninput: move |e| {
                                   if let Ok(v) = e.value().parse::<f64>() {
                                       slippage_percent.set(v);
                                   }
                               }
+                          }
                           }
                           div { class: "text-sm text-gray-400", "slippage %" }
                     }
