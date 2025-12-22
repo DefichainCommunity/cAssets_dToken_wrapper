@@ -29,7 +29,11 @@ const uniswapV2RouterAbi = [
     "function factory() view returns (address)",
     "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[])",
     "function swapExactTokensForETHSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)",
-    "function swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) payable"
+    "function swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) payable",
+    "function addLiquidity(address tokenA, address tokenB, uint amountADesired, uint amountBDesired, uint amountAMin, uint amountBMin, address to, uint deadline) external returns (uint amountA, uint amountB, uint liquidity)",
+    "function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) payable returns (uint amountToken, uint amountETH, uint liquidity)",
+    "function removeLiquidity(address tokenA, address tokenB, uint liquidity, uint amountAMin, uint amountBMin, address to, uint deadline) external returns (uint amountA, uint amountB)",
+    "function removeLiquidityETH(address token, uint liquidity, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external returns (uint amountToken, uint amountETH)"
 ];
 const uniswapV2FactoryAbi = [
     "function allPairsLength() view returns (uint256)",
@@ -132,6 +136,40 @@ export async function js_get_token_balance(user, token, isNative) {
         };
     }
 }
+
+export async function js_get_tokens_balances(user, tokens) {
+    try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+
+        const calls = tokens.map(async token => {
+            const c = new ethers.Contract(token, erc20Abi, provider);
+            const bal = await c.balanceOf(user);
+            return [token, bal.toString()];
+        });
+        const results = await Promise.all(calls);
+        const bal = await provider.getBalance(user);
+        // convert to object mapping
+        const map = {};
+        map['native'] = bal;
+        for (const [addr, value] of results) {
+            map[addr] = value;
+        }
+
+        return {
+            ok: true,
+            value: safeStringify(map)
+        };
+    } catch (err) {
+        console.error(err);
+        return {
+            ok: false,
+            value: err.reason || err.message || "Unknown error"
+        };
+    }
+}
+
 
 // FACTORY
 export async function js_get_all_wrappers(factoryAddress) {
@@ -269,7 +307,7 @@ export async function js_unwrap_tokens(contractAddress, cAsset, amount, dToken) 
 }
 
 
-//UniSwap
+//UniSwap V2
 export async function js_get_uniswap_v2_pairs(routerAddr) {
     try {
         if (!window.ethereum) throw new Error("MetaMask not installed");
@@ -401,6 +439,75 @@ export async function js_uniswap_v2_swap_tokens(tokenIn, tokenOut, amountIn, amo
                 );
             }
 
+        }
+        const receipt = await tx.wait();
+
+        return {
+            ok: true,
+            value: JSON.stringify(`${receipt.hash}`)
+        };
+    } catch (err) {
+        console.error(err);
+        return { ok: false, value: err?.reason || err?.message || String(err) };
+    }
+}
+
+export async function js_uniswap_v2_add_liquidity(tokenA, tokenB, amountA, amountB, routerAddress, isNativeA, isNativeB) {
+    try {
+        if (!window.ethereum) throw new Error("MetaMask not installed");
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        let provider = new ethers.BrowserProvider(window.ethereum);
+        let signer = await provider.getSigner();
+
+        const router = new ethers.Contract(routerAddress, uniswapV2RouterAbi, signer);
+
+        if (!isNativeA){
+            const tokenAContract = new ethers.Contract(tokenA, erc20Abi, signer);
+            // Approve
+            const allowance = await tokenAContract.allowance(signer, routerAddress);
+            if (allowance < amountA){
+                const approveATx = await tokenAContract.approve(routerAddress, amountA);
+                await approveATx.wait();
+            }
+        }
+        if (!isNativeB){
+            const tokenBContract = new ethers.Contract(tokenB, erc20Abi, signer);
+            // Approve
+            const allowance = await tokenBContract.allowance(signer, routerAddress);
+            if (allowance < amountB){
+                const approveBTx = await tokenBContract.approve(routerAddress, amountB);
+                await approveBTx.wait();
+            }
+        }
+
+        const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
+
+        let tx;
+        if (isNativeA || isNativeB){
+            const tokenAddress = isNativeA ? tokenB : tokenA;
+            const tokenAmount  = isNativeA ? amountB : amountA;
+            const nativeAmount  = isNativeA ? amountA : amountB;
+            tx = await router.addLiquidityETH(
+                tokenAddress,
+                tokenAmount,
+                0,
+                await signer.getAddress(), // TODO: use just signer
+                deadline,
+                {
+                    value: nativeAmount
+                }
+            );
+        }else{
+            tx = await router.addLiquidity(
+                tokenA,
+                tokenB,
+                amountA,
+                amountB,
+                0,
+                0,
+                await signer.getAddress(),
+                deadline,
+            );
         }
         const receipt = await tx.wait();
 

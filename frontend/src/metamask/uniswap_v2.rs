@@ -13,12 +13,13 @@ extern "C" {
     // uniswap v2
     async fn js_get_uniswap_v2_pairs(router_address: &str) -> JsValue;
     async fn js_uniswap_v2_swap_tokens(token_in: &str, token_out: &str, amount_in: &str,
-                            amount_out_min: &str, router_address: &str, is_native_in: bool, is_native_out: bool) -> JsValue;
+                                       amount_out_min: &str, router_address: &str, is_native_in: bool, is_native_out: bool) -> JsValue;
+    async fn js_uniswap_v2_add_liquidity(token_a: &str, token_b: &str, amount_a: &str, amount_b: &str, router_address: &str, is_native_a: bool, is_native_b: bool) -> JsValue;
 }
 
 
 // UniSwap
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct V2PairInfo {
     pub token0: String,
     pub token1: String,
@@ -47,4 +48,16 @@ pub async fn uniswap_v2_swap_tokens(
     is_native_out: bool,
 ) -> Result<String, String> {
     js_try!(js_uniswap_v2_swap_tokens(token_in,token_out,amount_in,amount_out_min,router_address, is_native_in, is_native_out) => String)
+}
+
+pub async fn  uniswap_v2_add_liquidity(
+    token_a: &str,
+    token_b: &str,
+    amount_a: &str,
+    amount_b: &str,
+    router_address: &str,
+    is_native_a: bool,
+    is_native_b: bool,
+)-> Result<String, String> {
+    js_try!(js_uniswap_v2_add_liquidity(token_a,token_b,amount_a,amount_b,router_address, is_native_a, is_native_b) => String)
 }

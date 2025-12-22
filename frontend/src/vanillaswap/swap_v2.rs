@@ -6,7 +6,7 @@ use crate::metamask::{
     get_token_balance,
     uniswap_v2::uniswap_v2_swap_tokens
 };
-use crate::wrapper::{TokenInfo, TokenType};
+use crate::token::{TokenInfo, TokenType};
 use crate::wallet_context::use_wallet;
 use super::v2::{approx_amount_out, unique_pool_tokens, use_v2_pools};
 
@@ -43,11 +43,12 @@ pub fn PoolV2Swap() -> Element {
     use_effect(move || {
         let from_sel = token_a().clone();
         let wallet = use_wallet();
+        let info = (wallet.info)();
         let mut balance = balance;
 
         spawn_local(async move {
             if let Some(from_sel) = from_sel
-                && let Ok(bal) = get_token_balance(&(wallet.info)().address, &from_sel.address, matches!(from_sel.token_type, TokenType::Native)).await {
+                && let Ok(bal) = get_token_balance(&info.address, &from_sel.address, matches!(from_sel.token_type, TokenType::Native)).await {
                     log::debug!("GetTokenBalance of address {} for token address {} :{:?}",(wallet.info)().address, from_sel.address, bal);
                     balance.set(bal);
                 }
@@ -125,8 +126,8 @@ pub fn PoolV2Swap() -> Element {
         }
     };
 
-    let from_options = unique_pool_tokens(&None, &pools.pairs.read(), &show_zero_liq.read(), (wallet.info)().chain_id);
-    let to_options = unique_pool_tokens(&token_a.read(), &pools.pairs.read(), &show_zero_liq.read(), (wallet.info)().chain_id);
+    let from_options = unique_pool_tokens(&None, &pools.pairs.read(), &show_zero_liq.read(), &true, &false, (wallet.info)().chain_id);
+    let to_options = unique_pool_tokens(&token_a.read(), &pools.pairs.read(), &show_zero_liq.read(), &true, &false, (wallet.info)().chain_id);
     let from_selected = token_a.read().as_ref().map(|t| serde_json::to_string(&t).unwrap()).unwrap_or_default();
     let to_selected = token_b.read().as_ref().map(|t| serde_json::to_string(&t).unwrap()).unwrap_or_default();
     // UI rendering

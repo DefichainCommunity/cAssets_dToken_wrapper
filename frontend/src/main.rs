@@ -1,6 +1,8 @@
 mod app;
 mod config;
 mod components;
+mod token;
+mod pool;
 mod metamask;
 mod vanillaswap;
 mod wrapper;
