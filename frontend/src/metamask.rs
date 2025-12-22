@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::collections::BTreeMap;
 use wasm_bindgen::prelude::*;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -16,6 +17,7 @@ extern "C" {
     pub fn js_on_chain_changed(callback: &Closure<dyn FnMut(u32)>);
     pub fn js_on_accounts_changed(callback: &Closure<dyn FnMut(Vec<JsValue>)>);
     async fn js_get_token_balance(user: &str, token: &str, is_native: bool) -> JsValue;
+    async fn js_get_tokens_balances(user: &str, token: Vec<JsValue>) -> JsValue;
 }
 
 pub fn js_parse<T: DeserializeOwned>(js: JsValue) -> Result<T, String> {
@@ -55,4 +57,12 @@ pub async fn connect_metamask()  -> Result<MetamaskInfo, Box<dyn Error>>{
 
 pub async fn get_token_balance(user: &str, token: &str, is_native: bool) -> Result<String,Box<dyn Error>>{
     js_try!(js_get_token_balance(user, token, is_native) => String)
+}
+
+pub async fn get_tokens_balances(user: &str, tokens: Vec<&str>) -> Result<BTreeMap<String,String>,Box<dyn Error>>{
+    let js_array: Vec<JsValue> = tokens.iter()
+        .map(|s| JsValue::from_str(s))
+        .collect();
+
+    js_try!(js_get_tokens_balances(user, js_array) => BTreeMap<String,String>)
 }
