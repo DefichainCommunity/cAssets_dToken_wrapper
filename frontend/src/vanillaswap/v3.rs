@@ -6,7 +6,7 @@ use crate::{
     config::{get_config_entry, ConfigEntry},
     metamask::uniswap_v3::{V3PoolState, get_uniswap_v3_pool_states},
     wallet_context::use_wallet,
-    wrapper::{TokenInfo, TokenType},
+    token::{TokenInfo, TokenType},
 };
 
 
