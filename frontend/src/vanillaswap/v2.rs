@@ -5,7 +5,7 @@ use crate::{
     config::{get_config_entry, ConfigEntry},
     metamask::uniswap_v2::{get_uniswap_v2_pairs, V2PairInfo},
     wallet_context::use_wallet,
-    wrapper::{TokenInfo, TokenType},
+    token::{TokenInfo, TokenType},
 };
 
 #[derive(Clone)]
@@ -46,8 +46,8 @@ pub fn use_sync_v2_pools() {
     });
 }
 
-pub fn is_zero_or_empty(v: &Option<String>) -> bool {
-    match v.as_deref() {
+pub fn is_zero_or_empty(v: Option<&str>) -> bool {
+    match v {
         None => true,
         Some("") => true,
         Some("0") => true,
@@ -63,6 +63,8 @@ pub fn unique_pool_tokens(
     selected_a: &Option<TokenInfo>,
     pairs: &Vec<V2PairInfo>,
     zero_liquid: &bool,
+    include_pool_tokens : &bool,
+    include_pool : &bool,
     chain_id : u32,
 ) -> Vec<TokenInfo> {
     let address = if let Some(a) = selected_a{
@@ -77,51 +79,64 @@ pub fn unique_pool_tokens(
     let wrapped_native_address = get_config_entry(chain_id, &ConfigEntry::WrappedNativeAddress).to_string();
 
     for p in pairs {
-        if *zero_liquid || (!is_zero_or_empty(&p.reserve0) && !is_zero_or_empty(&p.reserve1)){
-            // Check if Token A is token0
-            if p.token0 == address || address.is_empty() {
-                let token_b = TokenInfo {
-                    symbol: p.symbol1.clone().unwrap_or("???".into()),
-                    address: p.token1.clone(),
-                    decimals: p.decimals1.unwrap_or(18),
+        if *zero_liquid || (!is_zero_or_empty(p.reserve0.as_deref()) && !is_zero_or_empty(p.reserve1.as_deref())){
+            if *include_pool{
+                let pool_token = TokenInfo {
+                    symbol: format!("{}-{}", p.symbol0.clone().unwrap_or("???".into()), p.symbol1.clone().unwrap_or("???".into())),
+                    address: p.pair_address.clone(),
+                    decimals: 18,
                     token_type: TokenType::CAsset,
-
                 };
-                if seen.insert(token_b.address.clone()) {
-                    if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
-                        let native = TokenInfo {
-                            symbol: native_symbol.to_string(),
-                            address: token_b.address.clone(),
-                            decimals: token_b.decimals,
-                            token_type: TokenType::Native,
-                        };
-                        out.push(native);
-                    }
-                    out.push(token_b);
-
+                if seen.insert(pool_token.address.clone()) {
+                    out.push(pool_token);
                 }
             }
+            if *include_pool_tokens{
+                // Check if Token A is token0
+                if p.token0 == address || address.is_empty() {
+                    let token_b = TokenInfo {
+                        symbol: p.symbol1.clone().unwrap_or("???".into()),
+                        address: p.token1.clone(),
+                        decimals: p.decimals1.unwrap_or(18),
+                        token_type: TokenType::CAsset,
 
-            // Check if Token A is token1
-            if p.token1 == address || address.is_empty(){
-                let token_b = TokenInfo {
-                    symbol: p.symbol0.clone().unwrap_or("???".into()),
-                    address: p.token0.clone(),
-                    decimals: p.decimals0.unwrap_or(18),
-                    token_type: TokenType::CAsset,
+                    };
+                    if seen.insert(token_b.address.clone()) {
+                        if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
+                            let native = TokenInfo {
+                                symbol: native_symbol.to_string(),
+                                address: token_b.address.clone(),
+                                decimals: token_b.decimals,
+                                token_type: TokenType::Native,
+                            };
+                            out.push(native);
+                        }
+                        out.push(token_b);
 
-                };
-                if seen.insert(token_b.address.clone()) {
-                    if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
-                        let native = TokenInfo {
-                            symbol: native_symbol.to_string(),
-                            address: token_b.address.clone(),
-                            decimals: token_b.decimals,
-                            token_type: TokenType::Native,
-                        };
-                        out.push(native);
                     }
-                    out.push(token_b);
+                }
+
+                // Check if Token A is token1
+                if p.token1 == address || address.is_empty(){
+                    let token_b = TokenInfo {
+                        symbol: p.symbol0.clone().unwrap_or("???".into()),
+                        address: p.token0.clone(),
+                        decimals: p.decimals0.unwrap_or(18),
+                        token_type: TokenType::CAsset,
+
+                    };
+                    if seen.insert(token_b.address.clone()) {
+                        if token_b.address.to_lowercase() == wrapped_native_address.to_lowercase(){
+                            let native = TokenInfo {
+                                symbol: native_symbol.to_string(),
+                                address: token_b.address.clone(),
+                                decimals: token_b.decimals,
+                                token_type: TokenType::Native,
+                            };
+                            out.push(native);
+                        }
+                        out.push(token_b);
+                    }
                 }
             }
         }
@@ -158,10 +173,19 @@ pub fn approx_amount_out(
     format_units(amount_o, decimals_o as u8).unwrap_or("0".to_string())
 }
 
-// /// Displays the token amount in a human-readable format
-// pub fn display_token(value: U256) -> String {
-//     format!("{:.18}", value.low_u128() as f64 / 1_000_000_000_000_000_000.0)
-// }
+pub fn as_decimal(
+    amount_in: &String,
+    decimals: u8,
+) -> String{
+
+    if let Ok(amount_u256) = parse_units(amount_in,0) &&
+        let Ok(amount_decimal) =  format_units(amount_u256, decimals)
+    {
+        return amount_decimal;
+    }
+
+    "0".to_string()
+}
 
 // https://github.com/alloy-rs/examples/blob/main/examples/advanced/examples/uniswap_u256/helpers/alloy.rs
 
@@ -256,3 +280,61 @@ fn get_denominator(
 fn get_uniswappy_fee() -> U256 {
     U256::from(997)
 }
+
+pub fn get_ratio(
+    reserves0: String,
+    reserves1: String
+) -> String {
+    if let Ok(reserve0) = parse_units(&reserves0, 0) &&
+        let Ok(reserve1) = parse_units(&reserves1, 0)
+    {
+        if reserve0.get_absolute() > 0{
+            return format_units(U256::from(100_000_000) * reserve1.get_absolute() / reserve0.get_absolute(), 8).unwrap_or("0".to_string())
+        }
+    }
+    "0".to_string()
+}
+
+pub fn calc_pool_share(
+    amount_a: String,
+    reserves0: String,
+    decimals: u8
+) -> String {
+    log::debug!("Triggered calc pool share");
+    if let Ok(reserve0) = parse_units(&reserves0, 0) &&
+        let Ok(amount_a) = parse_units(&amount_a, decimals)
+    {
+        log::debug!("Amount a calc pool share :{}",amount_a);
+        log::debug!("Reserve a calc pool share :{}",reserve0);
+        let share = if reserve0.get_absolute() > 0 || amount_a.get_absolute() > 0{
+            (amount_a.get_absolute() * U256::from(1_000_000))  / (reserve0.get_absolute() +  amount_a.get_absolute())
+        }else{
+            U256::from(0)
+        };
+        log::debug!("Triggered calc pool share :{}",share);
+        return format_units(share, 4).unwrap_or("0".to_string())
+    }
+    "0".to_string()
+}
+
+
+pub fn calc_price_impact(
+    amount_a: f64,
+    amount_b: f64,
+    r0: f64,
+    r1: f64,
+) -> f64 {
+    if r0 == 0.0 || r1 == 0.0 { return 0.0; }
+    let price_before = r0 / r1;
+    let price_after = (r0 + amount_a) / (r1 + amount_b);
+    ((price_after - price_before) / price_before) * 100.0
+}
+
+
+// pub fn calc_pool_share(
+//     amount_a: f64,
+//     r0: f64,
+// ) -> f64 {
+//     if r0 == 0.0 { return 100.0; }
+//     (amount_a / (r0 + amount_a)) * 100.0
+// }
