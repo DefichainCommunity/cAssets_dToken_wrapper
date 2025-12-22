@@ -8,24 +8,9 @@ use crate::{
         get_token_balance,
         wrapper::{TokenWrapperInfo, get_all_wrappers, wrap_tokens, unwrap_tokens}
     },
+    token::{TokenInfo, TokenType},
     wallet_context::use_wallet,
 };
-
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct TokenInfo {
-    pub symbol: String,
-    pub address: String,
-    pub decimals: u64,
-    pub token_type : TokenType,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum TokenType{
-    Native,
-    DToken,
-    CAsset,
-}
 
 fn update_pair(from: &String, wrappers: &[TokenWrapperInfo]) -> (Option<TokenInfo>, Option<TokenInfo>){
 
